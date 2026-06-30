@@ -714,7 +714,10 @@ function lsGet(k){ try{return localStorage.getItem(k);}catch(e){return null;} }
 function lsSet(k,v){ try{localStorage.setItem(k,v);}catch(e){} }
 function profKey(nick,id){ return 'prof:'+nick+':'+id; }
 function autoTier(c){ if(c.plays>=5) return '得意'; if(c.plays>=2) return '普通'; return '練習中'; }
-function profPool(p){ if(p.isCoach) return p.champ_pool||[]; return (p.byRole && p.primaryRole && p.byRole[p.primaryRole]) ? p.byRole[p.primaryRole].champ_pool : (p.champ_pool||[]); }
+function profPool(p, role){
+  if(p.isCoach){ if(role && p.byRole && p.byRole[role]) return p.byRole[role].champ_pool; return p.champ_pool||[]; }
+  return (p.byRole && p.primaryRole && p.byRole[p.primaryRole]) ? p.byRole[p.primaryRole].champ_pool : (p.champ_pool||[]);
+}
 function teamCoaches(team){ return COACHES.filter(p=>p.team===team); }
 function champStatsTable(pool){
   if(!pool||!pool.length) return '<div class="wl" style="padding:4px 0">データなし</div>';
@@ -724,16 +727,17 @@ function champStatsTable(pool){
   return h+'</table>';
 }
 function nameToId(name){ const e=Object.entries(DATA.champMap||{}).find(([id,n])=>n===name||id===name); return e?e[0]:null; }
-function getProfMap(p){
+function getProfMap(p, role){
   const map={};
-  profPool(p).forEach(c=>{ if(c.champId) map[c.champId]={champ:c.champ,plays:c.plays,winrate:c.winrate,tier:autoTier(c)}; });
+  profPool(p, role).forEach(c=>{ if(c.champId) map[c.champId]={champ:c.champ,plays:c.plays,winrate:c.winrate,tier:autoTier(c)}; });
   let added=[]; try{ added=JSON.parse(lsGet('profadd:'+p.nickname)||'[]'); }catch(e){}
   added.forEach(a=>{ if(!map[a.id]) map[a.id]={champ:a.name,plays:0,winrate:null,tier:'練習中'}; });
   Object.keys(map).forEach(id=>{ const ov=lsGet(profKey(p.nickname,id)); if(ov && ov!=='除外') map[id].tier=ov; if(ov==='除外') delete map[id]; });
   return map;
 }
-function cycleProf(nick,id){ const p=ALL.find(x=>x.nickname===nick); const map=getProfMap(p); const cur=map[id]?map[id].tier:'練習中'; const order=['得意','普通','練習中']; lsSet(profKey(nick,id), order[(order.indexOf(cur)+1)%3]); }
+function cycleProf(nick,id,role){ const p=ALL.find(x=>x.nickname===nick); const map=getProfMap(p, role||null); const cur=map[id]?map[id].tier:'練習中'; const order=['得意','普通','練習中']; lsSet(profKey(nick,id), order[(order.indexOf(cur)+1)%3]); }
 let POOLTEAM=null;
+const POOLCOACHROLE={};   // コーチ別の表示ロール（''=全ロール）
 function renderPool(){
   const el=document.getElementById('page-pool');
   if(!POOLTEAM) POOLTEAM=TEAMS[0];
@@ -746,16 +750,25 @@ function renderPool(){
   drawPool2();
 }
 function poolCard(p, roleLabel){
-  const map=getProfMap(p); const byTier={'得意':[],'普通':[],'練習中':[]};
+  const crole = p.isCoach ? (POOLCOACHROLE[p.nickname]||'') : '';   // ''=全ロール
+  const pool = profPool(p, crole||null);
+  const map=getProfMap(p, crole||null); const byTier={'得意':[],'普通':[],'練習中':[]};
   Object.entries(map).forEach(([id,c])=>{ if(byTier[c.tier]) byTier[c.tier].push({id,...c}); });
   for(const t in byTier) byTier[t].sort((a,b)=>b.plays-a.plays);
-  let h=`<div class="profcard"><div class="profhead">${roleLabel} ・ ${p.nickname} <span class="wl">${p.agg.games}試合</span></div>`;
+  const headGames = (p.isCoach && crole && p.byRole[crole]) ? p.byRole[crole].games : p.agg.games;
+  let h=`<div class="profcard"><div class="profhead">${roleLabel} ・ ${p.nickname} <span class="wl">${headGames}試合</span></div>`;
+  // コーチはポジションで絞り込めるタブを表示（チャンピオンが多すぎる対策）
+  if(p.isCoach){
+    const roles=p.rolesPlayed||[];
+    h+=`<div class="profrow"><span class="lab">ポジション</span><div class="tabs">`+
+      [['','全']].concat(roles.map(r=>[r,r])).map(([val,lab])=>`<button class="cfilt ${val===crole?'active':''}" data-coach="${p.nickname}" data-crole="${val}">${lab}${val&&p.byRole[val]?`(${p.byRole[val].games})`:''}</button>`).join('')+`</div></div>`;
+  }
   ['得意','普通','練習中'].forEach(tier=>{ const cls=tier==='得意'?'prof-good':(tier==='普通'?'prof-norm':'prof-prac');
     h+=`<div class="profrow"><span class="lab">${tier}</span>`+
-      byTier[tier].map(c=>`<span class="tier-tok" data-p="${p.nickname}" data-id="${c.id}" title="${c.champ}${c.plays?(' '+c.plays+'戦'):''}"><img class="${cls}" src="${champIcon(c.id)}" onerror="this.style.display='none'"><span class="x" data-x="1">×</span></span>`).join('')+
+      byTier[tier].map(c=>`<span class="tier-tok" data-p="${p.nickname}" data-id="${c.id}" data-role="${crole}" title="${c.champ}${c.plays?(' '+c.plays+'戦'):''}"><img class="${cls}" src="${champIcon(c.id)}" onerror="this.style.display='none'"><span class="x" data-x="1">×</span></span>`).join('')+
       `</div>`; });
   h+=`<div class="profrow"><span class="lab">追加</span><span class="addbox"><input type="text" list="champlist" id="add_${p.nickname}" placeholder="チャンプ名"><button data-add="${p.nickname}">追加</button></span></div>`;
-  h+=`<details open style="margin-top:6px"><summary class="wl" style="cursor:pointer">チャンピオン別戦績（${profPool(p).length}種・使用回数/勝率）</summary>${champStatsTable(profPool(p))}</details>`;
+  h+=`<details open style="margin-top:6px"><summary class="wl" style="cursor:pointer">チャンピオン別戦績（${pool.length}種・使用回数/勝率）</summary>${champStatsTable(pool)}</details>`;
   return h+'</div>';
 }
 function drawPool2(){
@@ -766,8 +779,9 @@ function drawPool2(){
     cs.forEach(c=>{ h+=poolCard(c, 'コーチ/'+(c.primaryRole||'')); }); }
   h+=`<datalist id="champlist">${Object.values(DATA.champMap||{}).map(n=>`<option value="${n}">`).join('')}</datalist>`;
   body.innerHTML=h;
-  body.querySelectorAll('.tier-tok').forEach(tok=>{ tok.onclick=(e)=>{ const nick=tok.dataset.p,id=tok.dataset.id;
-    if(e.target.dataset.x){ lsSet(profKey(nick,id),'除外'); } else { cycleProf(nick,id); } drawPool2(); }; });
+  body.querySelectorAll('.tier-tok').forEach(tok=>{ tok.onclick=(e)=>{ const nick=tok.dataset.p,id=tok.dataset.id,role=tok.dataset.role||null;
+    if(e.target.dataset.x){ lsSet(profKey(nick,id),'除外'); } else { cycleProf(nick,id,role); } drawPool2(); }; });
+  body.querySelectorAll('.cfilt').forEach(b=>{ b.onclick=()=>{ POOLCOACHROLE[b.dataset.coach]=b.dataset.crole; drawPool2(); }; });
   body.querySelectorAll('[data-add]').forEach(btn=>{ btn.onclick=()=>{ const nick=btn.dataset.add; const inp=document.getElementById('add_'+nick); const id=nameToId((inp.value||'').trim()); if(!id)return;
     let added=[]; try{added=JSON.parse(lsGet('profadd:'+nick)||'[]');}catch(e){} if(!added.find(a=>a.id===id)){added.push({id,name:DATA.champMap[id]||id}); lsSet('profadd:'+nick,JSON.stringify(added));} lsSet(profKey(nick,id),'練習中'); drawPool2(); }; });
 }
