@@ -1,0 +1,11 @@
+{
+  "tier": "Bronze〜Silver",
+  "_note": "ブロンズ〜シルバー帯のおおよその目安。改善提案の基準値です。自由に編集できます。deaths/death10 は少ないほど良い指標です。",
+  "roles": {
+    "Top":     {"csPerMin": 6.0, "csAt10": 60, "deaths": 6.0, "death10": 1.0, "kda": 2.0, "goldDiffAt10": 0, "killParticipation": 45, "dmgShare": 24, "visionPerMin": 0.5, "wardsPlaced": 8, "controlWards": 2},
+    "Jungle":  {"csPerMin": 4.5, "csAt10": 50, "deaths": 6.0, "death10": 1.0, "kda": 2.2, "goldDiffAt10": 0, "killParticipation": 55, "dmgShare": 20, "visionPerMin": 0.7, "wardsPlaced": 9, "controlWards": 3},
+    "Mid":     {"csPerMin": 6.2, "csAt10": 62, "deaths": 6.0, "death10": 1.0, "kda": 2.3, "goldDiffAt10": 0, "killParticipation": 50, "dmgShare": 26, "visionPerMin": 0.6, "wardsPlaced": 8, "controlWards": 2},
+    "Bot":     {"csPerMin": 6.5, "csAt10": 62, "deaths": 5.5, "death10": 0.8, "kda": 2.4, "goldDiffAt10": 0, "killParticipation": 50, "dmgShare": 26, "visionPerMin": 0.5, "wardsPlaced": 8, "controlWards": 2},
+    "Support": {"csPerMin": 1.0, "csAt10": 12, "deaths": 6.5, "death10": 1.0, "kda": 2.2, "goldDiffAt10": 0, "killParticipation": 55, "dmgShare": 12, "visionPerMin": 1.3, "wardsPlaced": 18, "controlWards": 4}
+  }
+}

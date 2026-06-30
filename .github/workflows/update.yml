@@ -1,0 +1,98 @@
+name: Update dashboard
+
+# クラウド（GitHub Actions）上で収集→集計→公開まで完結させる。
+# ローカルPCで何も動かさずに更新できます。
+
+on:
+  # 手動実行（Actionsタブの「Run workflow」ボタン）。最新APIキーをここに貼って実行できる。
+  workflow_dispatch:
+    inputs:
+      api_key:
+        description: "Riot APIキー（空ならSecretのRIOT_API_KEYを使用）"
+        required: false
+        default: ""
+      match_count:
+        description: "1選手あたりの取得試合数（空ならconfig.jsonの値）"
+        required: false
+        default: ""
+  # 定期自動実行したい場合は下のコメントを外す（Personalキーは24hで失効する点に注意。
+  # 無人運用にはProductionキー推奨）。例: 毎日 21:00 JST = 12:00 UTC
+  # schedule:
+  #   - cron: "0 12 * * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: update-dashboard
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      # 試合キャッシュを引き継いで増分更新を高速化（初回は空＝フル収集）
+      - name: Restore data cache
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: riot-data-${{ github.run_id }}
+          restore-keys: |
+            riot-data-
+
+      # 選手リスト（サモナーネーム/Riot ID）はリポジトリに置かず、Secretから実行時に生成
+      - name: Write players.csv from secret
+        env:
+          PLAYERS_CSV: ${{ secrets.PLAYERS_CSV }}
+        run: |
+          if [ -n "$PLAYERS_CSV" ]; then
+            printf '%s\n' "$PLAYERS_CSV" > players.csv
+            echo "players.csv をSecretから生成しました（$(wc -l < players.csv) 行）"
+          elif [ -f players.csv ]; then
+            echo "PLAYERS_CSV未設定。リポジトリ内のplayers.csvを使用します。"
+          else
+            echo "::error::PLAYERS_CSV secret も players.csv も存在しません。Secretを設定してください。"
+            exit 1
+          fi
+
+      - name: Collect & analyze
+        env:
+          RIOT_API_KEY: ${{ github.event.inputs.api_key != '' && github.event.inputs.api_key || secrets.RIOT_API_KEY }}
+          MATCH_COUNT: ${{ github.event.inputs.match_count }}
+        run: |
+          python collect.py
+          python analyze.py
+
+      - name: Prepare site
+        run: |
+          mkdir -p site
+          cp output/dashboard.html site/index.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

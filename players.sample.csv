@@ -1,0 +1,17 @@
+team,role,nickname,name,tagline
+TeamA,コーチ,コーチ名,GameName,JP1
+TeamA,Top,表示名,GameName,TAG
+TeamA,Jungle,表示名,GameName,TAG
+TeamA,Mid,表示名,GameName,TAG
+TeamA,Bot,表示名,GameName,TAG
+TeamA,Sup,表示名,GameName,TAG
+TeamB,Top,表示名,GameName,TAG
+TeamB,Jungle,表示名,GameName,TAG
+TeamB,Mid,表示名,GameName,TAG
+TeamB,Bot,表示名,GameName,TAG
+TeamB,Sup,表示名,GameName,TAG
+TeamC,Top,表示名,GameName,TAG
+TeamC,Jungle,表示名,GameName,TAG
+TeamC,Mid,表示名,GameName,TAG
+TeamC,Bot,表示名,GameName,TAG
+TeamC,Sup,表示名,GameName,TAG

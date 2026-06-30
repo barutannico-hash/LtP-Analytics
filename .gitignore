@@ -1,0 +1,12 @@
+# 収集キャッシュ・生成物はアップロード不要（Actionsが自動生成・キャッシュ）
+data/
+output/
+__pycache__/
+*.pyc
+
+# 個人情報（サモナーネーム・Riot ID）を含むため公開リポジトリには載せない。
+# 実行時に GitHub Secret(PLAYERS_CSV) から生成する。ローカル実行用に手元には残す。
+players.csv
+
+# APIキーを含む可能性のあるローカル設定（誤コミット防止）
+config.local.json

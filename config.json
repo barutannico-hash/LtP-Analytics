@@ -1,0 +1,9 @@
+{
+    "api_key": "RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "region": "asia",
+    "match_count": 200,
+    "queue": null,
+    "players_file": "players.csv",
+    "data_dir": "data",
+    "output_dir": "output"
+}
