@@ -92,6 +92,8 @@ def build_player_records(cfg, players, puuids, match_ids):
             match = load_json(common.match_cache_path(cfg, mid))
             if not match or "info" not in match:
                 continue
+            if metrics.is_bot_match(match):   # AI戦（Co-op vs AI）は除外
+                continue
             part = metrics.find_participant(match, puuid)
             if part is None:
                 continue

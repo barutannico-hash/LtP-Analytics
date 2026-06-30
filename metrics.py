@@ -27,6 +27,22 @@ def safe_div(a, b):
     return a / b if b else 0.0
 
 
+# Co-op vs AI（対AI / BOT戦）のキューID
+BOT_QUEUES = {31, 32, 33, 830, 840, 850, 870, 880, 890}
+
+
+def is_bot_match(match):
+    """対AI戦（Co-op vs AI）かどうか。queueId または BOT参加者で判定。"""
+    info = match.get("info", {})
+    if info.get("queueId") in BOT_QUEUES:
+        return True
+    for p in info.get("participants", []):
+        # Co-op vs AI のBOTは puuid が "BOT"
+        if p.get("puuid") == "BOT":
+            return True
+    return False
+
+
 def find_participant(match, puuid):
     for p in match["info"]["participants"]:
         if p.get("puuid") == puuid:

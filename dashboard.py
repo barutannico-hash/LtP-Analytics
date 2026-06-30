@@ -536,12 +536,8 @@ function renderDetail(){
      <div class="chart-box"><canvas id="p3GrowthChart"></canvas></div>
      <div class="note">青系の太線=本人の各試合の値（選択ロールのみ）。<b>移動平均(5)</b>＝直近5試合の平均で調子のトレンド。
        <b>ロール平均</b>＝同ロールを担当した選手全員の平均（比較の基準）。<b>コーチ平均</b>＝コーチ全員の平均（目標の目安）。</div></section>
-   <div class="grid2">
-     <section><h2>レーニング成績（レーダー）</h2><div class="chart-sm"><canvas id="p3Radar"></canvas></div>
-       <div class="note">外側ほど良い。<b>100=ロール平均</b>を基準にした相対値（外＝平均より上、内＝平均より下）。</div></section>
-     <section><h2>デスのタイミング分布</h2><div class="chart-sm"><canvas id="p3Death"></canvas></div>
-       <div class="note">横軸=試合内の経過時間(2分刻み) / 縦軸=デス合計。集中する時間帯を発見。</div></section>
-   </div>
+   <section><h2>デスのタイミング分布</h2><div class="chart-sm"><canvas id="p3Death"></canvas></div>
+     <div class="note">横軸=試合内の経過時間(2分刻み) / 縦軸=デス合計。集中する時間帯を発見。</div></section>
    <section><h2>レーニング成績（試合ごと）</h2><div class="scroll"><table id="p3Lane"></table></div></section>
    <section><h2>チャンピオンプール</h2>
      <div class="scroll"><table id="p3Pool" class="ugg"></table></div>
@@ -562,7 +558,7 @@ function fillRoleSel(){
   rsel.innerHTML=rs.map(r=>`<option value="${r}" ${r===P3.role?'selected':''}>${r}（${playerGames(p,r)}試合）</option>`).join('');
   rsel.onchange=()=>{P3.role=rsel.value; drawP3();};
 }
-function drawP3(){ drawProfile(); drawSuggest(); drawCoachCmp(); drawGrowth(); drawRadar(); drawDeath(); drawLane(); drawPool(); drawRecent(); }
+function drawP3(){ drawProfile(); drawSuggest(); drawCoachCmp(); drawGrowth(); drawDeath(); drawLane(); drawPool(); drawRecent(); }
 function drawSuggest(){
   const p=curP(); const sug=suggestions(p, P3.role);
   const box=document.getElementById('p3Suggest');
@@ -613,18 +609,6 @@ function drawGrowth(){
     scales:{x:{title:{display:true,text:'試合番号(古い→新しい)'}},y:{title:{display:true,text:M[k].l}}},
     plugins:{tooltip:{callbacks:{afterLabel:(c)=>{ if(c.datasetIndex!==0)return''; const m=ms[c.dataIndex];
       return `${m.win?'WIN':'LOSE'} | ${m.champion} vs ${m.opponentChampion||'?'} | KDA ${m.kills}/${m.deaths}/${m.assists}`; }}}}}});
-}
-function drawRadar(){
-  destroyCharts(['p3Radar']); const p=curP(); const role=P3.role;
-  const axes=[['csAt10',true],['goldDiffAt10',true],['levelDiffAt10',true],['death10',false]];
-  const labels=axes.map(a=>a[0]==='death10'?'デス@10の少なさ':M[a[0]].l);
-  const me=axes.map(a=>{ const ref=roleAvg(role,a[0]); return normRel(aggVal(p,a[0],role), a[0], ref); });
-  const avgArr=axes.map(()=>100);
-  const rr=radarRange(me);
-  new Chart('p3Radar',{type:'radar',data:{labels,datasets:[
-    {label:p.nickname,data:me,borderColor:teamColor(p.team),backgroundColor:teamColor(p.team)+'33'},
-    {label:'ロール平均(=100)',data:avgArr,borderColor:'#8b95a5',backgroundColor:'transparent',borderDash:[4,3]}
-  ]},options:{responsive:true,maintainAspectRatio:false,scales:{r:{min:rr.min,max:rr.max,ticks:{stepSize:rr.step,backdropColor:'transparent'}}}}});
 }
 function drawDeath(){
   destroyCharts(['p3Death']); const ms=roleMatches();
@@ -682,7 +666,6 @@ function renderBench(){
   const el=document.getElementById('page-bench');
   el.innerHTML=`
    <section><div class="controls"><label>ロール:</label><div class="tabs" id="p4Role"></div></div></section>
-   <section><h2>レーダーチャート比較</h2><div class="chart-box"><canvas id="p4Radar"></canvas></div></section>
    <section><h2>コーチ比較（実数値）</h2><div class="scroll"><table id="p4CoachTable"></table></div>
      <div class="note">ロール内の各選手とコーチを実数値で比較。下部の行が各コーチ（参考値）。</div></section>
    <section><h2>指標別ランキング</h2><div class="grid3" id="p4Ranks"></div></section>`;
@@ -691,17 +674,7 @@ function renderBench(){
     b.onclick=()=>{P4.role=r; rt.querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); drawP4();}; rt.appendChild(b); });
   drawP4();
 }
-function drawP4(){ drawP4Radar(); drawP4CoachTable(); drawP4Ranks(); }
-function drawP4Radar(){
-  destroyCharts(['p4Radar']); const role=P4.role; const ps=rolePlayers(role);
-  const axes=[['csPerMin',true],['kda',true],['deaths',false],['kp',true],['visionPerMin',true],['dmgShare',true]];
-  const labels=axes.map(a=>a[0]==='deaths'?'デスの少なさ':M[a[0]].l);
-  const ds=ps.map(p=>({label:p.nickname,borderColor:teamColor(p.team),backgroundColor:'transparent',
-    data:axes.map(a=>normRel(aggVal(p,a[0],role), a[0], roleAvg(role,a[0])))}));
-  ds.push({label:'ロール平均(=100)',data:axes.map(()=>100),borderColor:'#8b95a5',borderDash:[4,3],backgroundColor:'transparent',pointRadius:0});
-  const rr=radarRange(ds.flatMap(d=>d.data));
-  new Chart('p4Radar',{type:'radar',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,scales:{r:{min:rr.min,max:rr.max,ticks:{stepSize:rr.step,backdropColor:'transparent'}}}}});
-}
+function drawP4(){ drawP4CoachTable(); drawP4Ranks(); }
 function drawP4CoachTable(){
   const role=P4.role; const ps=rolePlayers(role);
   const keys=['winrate','kda','csPerMin','csAt10','deaths','kp','dmgShare','dmgDealt','dmgTaken','visionPerMin','wardsPlaced'];
