@@ -52,12 +52,12 @@ def build_payload(records, cfg=None, champ_map=None):
     champ_set = set()
     n_players = 0
     for pr in records:
-        for m in pr["matches"]:
-            if m.get("matchId"):
-                unique_ids.add(m["matchId"])
+        # 概要サマリーの集計はコーチを除外し、3チームの選手のみで算出する
         if not pr["isCoach"]:
             n_players += 1
             for m in pr["matches"]:
+                if m.get("matchId"):
+                    unique_ids.add(m["matchId"])
                 if m.get("champion"):
                     champ_set.add(m["champion"])
         matches = [{k: m.get(k) for k in MATCH_FIELDS} for m in pr["matches"]]
