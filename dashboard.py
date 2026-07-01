@@ -226,6 +226,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <button data-page="detail">③ 選手詳細</button>
   <button data-page="bench">④ ロール別ベンチマーク</button>
   <button data-page="pool">⑤ チャンピオンプール（習熟度）</button>
+  <button data-page="guide">⑥ 使い方ガイド</button>
 </nav>
 
 <div class="page active" id="page-overview"></div>
@@ -233,6 +234,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <div class="page" id="page-detail"></div>
 <div class="page" id="page-bench"></div>
 <div class="page" id="page-pool"></div>
+<div class="page" id="page-guide"></div>
 
 <script>
 const DATA = __DATA__;
@@ -360,6 +362,91 @@ function suggestions(p, role){
   out.sort((a,b)=>b.short-a.short); return out;
 }
 
+// ===== 日付ユーティリティ（JST基準で試合を日別集計） =====
+function toJstDate(ms){ if(ms==null) return null; return new Date(ms + 9*3600*1000).toISOString().slice(0,10); }
+function groupByDate(matches){
+  const map={};
+  matches.forEach(m=>{ const d=toJstDate(m.gameCreation); if(!d) return; (map[d]=map[d]||[]).push(m); });
+  return map;
+}
+function sortedDates(map){ return Object.keys(map).sort(); }
+
+// agg指標キー -> 試合明細(matches[])側のフィールド名（名前が異なるものだけ対応表を持つ）
+const MATCH_FIELD_MAP = { kp:'killParticipation', dmgDealt:'dmgToChamp' };
+function matchFieldVal(m,k){ return m[MATCH_FIELD_MAP[k]||k]; }
+// ある期間（試合の配列）における指標の平均。winrateだけ特別扱い。
+function periodAvg(matches,k){
+  if(!matches.length) return null;
+  if(k==='winrate') return matches.filter(m=>m.win).length/matches.length*100;
+  const vs=matches.map(m=>matchFieldVal(m,k)).filter(v=>v!=null);
+  return vs.length ? vs.reduce((a,b)=>a+b,0)/vs.length : null;
+}
+
+// ===== 「良くなったポイント」：直近N試合 と それ以前 を比較し、伸びた指標を返す =====
+const IMPROVE_METRICS = ['winrate','kda','deaths','csPerMin','csAt10','goldDiffAt10','levelDiffAt10','dmgShare','kp','visionPerMin','death10'];
+const IMPROVE_MSG = {
+  winrate:'勝率が上がっています。今のプレースタイルは合っています。',
+  kda:'キル関与を保ちながらデスが減っています。良い判断ができています。',
+  deaths:'デスが減りました。無理な戦闘を避けられている証拠です。',
+  csPerMin:'CS効率が上がっています。レーン戦の基礎が安定してきました。',
+  csAt10:'序盤のファームが伸びています。レーニングの基礎が身についてきました。',
+  goldDiffAt10:'序盤のゴールド差が改善しています。対面に勝てる場面が増えています。',
+  levelDiffAt10:'序盤のレベル差が改善しています。経験値効率が上がっています。',
+  dmgShare:'チーム内の与ダメージシェアが伸びています。集団戦での存在感が増しています。',
+  kp:'キル関与率が上がっています。チームの戦闘への関わりが増えています。',
+  visionPerMin:'視界スコアが伸びています。マップ把握が上手くなってきました。',
+  death10:'序盤のデスが減っています。ガンク対応や視界確保が上達しています。',
+};
+function improvements(p, role, n){
+  n = n || 10;
+  const ms = role ? p.matches.filter(m=>m.playedRole===role) : p.matches;
+  const total = ms.length;
+  if(total < 6) return {list:[], recentN:0, earlierN:0, total};
+  const recentN = Math.min(n, Math.floor(total/2));
+  const recent = ms.slice(total-recentN);
+  const earlier = ms.slice(0, total-recentN);
+  const out=[];
+  IMPROVE_METRICS.forEach(k=>{
+    if(!M[k]) return;
+    const rv=periodAvg(recent,k), ev=periodAvg(earlier,k);
+    if(rv==null||ev==null) return;
+    const diff=rv-ev;
+    const good = M[k].hi ? diff>0 : diff<0;
+    if(!good) return;
+    const relImprove = Math.abs(diff)/(Math.abs(ev)||1);
+    if(relImprove < 0.03) return;   // 3%未満のブレはノイズとして無視
+    out.push({k, recent:rv, earlier:ev, diff, relImprove});
+  });
+  out.sort((a,b)=>b.relImprove-a.relImprove);
+  return {list:out, recentN, earlierN:earlier.length, total};
+}
+
+// ===== 自己ベスト更新・連勝/連敗ストリーク（③選手詳細のモチベーション表示） =====
+const BEST_CHECKS = [
+  {k:'csAt10', label:'CS@10 自己ベスト', hi:true},
+  {k:'kda', label:'KDA 自己ベスト', hi:true},
+  {k:'goldDiffAt10', label:'ゴールド差@10 自己ベスト', hi:true},
+];
+function personalBests(ms){
+  const out=[];
+  if(ms.length<2) return out;
+  const last=ms[ms.length-1]; const prev=ms.slice(0,-1);
+  BEST_CHECKS.forEach(c=>{
+    const v=last[c.k]; if(v==null) return;
+    const prevVals=prev.map(m=>m[c.k]).filter(x=>x!=null); if(!prevVals.length) return;
+    const best=c.hi?Math.max(...prevVals):Math.min(...prevVals);
+    const isBest=c.hi? v>best : v<best;
+    if(isBest) out.push({label:c.label, value:v, d:M[c.k].d});
+  });
+  return out;
+}
+function streakInfo(ms){
+  if(!ms.length) return null;
+  const last=ms[ms.length-1].win; let cnt=0;
+  for(let i=ms.length-1;i>=0;i--){ if(ms[i].win===last) cnt++; else break; }
+  return {win:last, count:cnt};
+}
+
 // ===== ナビ =====
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
@@ -388,6 +475,12 @@ function renderOverview(){
      <div class="stat"><div class="l">全体平均KDA</div><div class="n">${fmt(avg('kda'),2)}</div></div>
      <div class="stat"><div class="l">全体平均CS/min</div><div class="n">${fmt(avg('csPerMin'),1)}</div></div>
    </div></section>
+   <section><h2>日別ハイライト</h2>
+     <div id="ovDailyHighlight" style="margin-bottom:10px;font-size:13px"></div>
+     <div class="chart-box"><canvas id="ovDailyChart"></canvas></div>
+     <div class="note">練習・大会があった日ごとの全体勝率(緑・左軸)と平均KDA(青・右軸)、試合数(灰棒)。大会が進むにつれて全体がどう伸びているかの目安に。</div></section>
+   <section><h2>今、伸びている選手</h2><div id="ovGoodPlay"></div>
+     <div class="note">直近10試合とそれ以前を比較し、最も伸び幅が大きかった選手・指標をピックアップ。コーチが褒めるきっかけに使ってください。</div></section>
    <section><h2>チーム別サマリー</h2><div class="scroll"><table id="ovTeam"></table></div>
      <div class="note">行クリックで「選手一覧」をそのチームで絞り込み表示します。</div></section>
    <section><h2>全体 チャンピオン使用回数 ＆ 勝率</h2>
@@ -420,6 +513,59 @@ function renderOverview(){
 
   // ロール別平均
   drawOvRole();
+  // 日別ハイライト
+  drawOvDaily();
+  drawOvGoodPlay();
+}
+function drawOvGoodPlay(){
+  const box=document.getElementById('ovGoodPlay');
+  const picks=[];
+  PLAYERS.forEach(p=>{
+    (p.rolesPlayed&&p.rolesPlayed.length?p.rolesPlayed:[p.primaryRole]).forEach(role=>{
+      const res=improvements(p, role, 10);
+      if(res.list.length) picks.push({p, role, top:res.list[0]});
+    });
+  });
+  if(!picks.length){ box.innerHTML='<div class="note">比較に十分な試合数がまだありません。</div>'; return; }
+  picks.sort((a,b)=>b.top.relImprove-a.top.relImprove);
+  let h='<div class="cards">';
+  picks.slice(0,3).forEach(({p,role,top})=>{
+    h+=`<div class="stat" style="border-left:3px solid var(--good)"><div class="l">${p.nickname} <span class="wl">(${role})</span></div>`+
+      `<div class="n" style="font-size:16px">${M[top.k].l} <span class="pos">${top.diff>=0?'+':''}${fmt(top.diff,M[top.k].d)}</span></div>`+
+      `<div class="sub">${fmt(top.earlier,M[top.k].d)} → ${fmt(top.recent,M[top.k].d)}</div></div>`;
+  });
+  h+='</div>';
+  box.innerHTML=h;
+}
+function drawOvDaily(){
+  destroyCharts(['ovDailyChart']);
+  const allMatches = PLAYERS.flatMap(p=>p.matches);
+  const byDate = groupByDate(allMatches);
+  const dates = sortedDates(byDate);
+  const box = document.getElementById('ovDailyHighlight');
+  if(dates.length===0){ box.innerHTML='<div class="note">日別データがありません。</div>'; return; }
+  const wr = dates.map(d=>{ const ms=byDate[d]; return ms.filter(m=>m.win).length/ms.length*100; });
+  const kda = dates.map(d=>periodAvg(byDate[d],'kda'));
+  const games = dates.map(d=>byDate[d].length);
+  new Chart('ovDailyChart',{data:{labels:dates,datasets:[
+    {type:'bar',label:'試合数',data:games,backgroundColor:'rgba(139,149,165,0.35)',yAxisID:'y2',order:3},
+    {type:'line',label:'勝率%',data:wr,borderColor:'#3fb950',backgroundColor:'#3fb950',yAxisID:'y',tension:0.3,pointRadius:4,order:1},
+    {type:'line',label:'平均KDA',data:kda,borderColor:'#5b8def',backgroundColor:'#5b8def',yAxisID:'y1',tension:0.3,pointRadius:4,order:2},
+  ]},options:{responsive:true,maintainAspectRatio:false,
+    scales:{
+      y:{position:'left',beginAtZero:true,max:100,title:{display:true,text:'勝率%'}},
+      y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false},title:{display:true,text:'KDA'}},
+      y2:{display:false,beginAtZero:true},
+    }}});
+  // 直近の練習日ハイライト（前回比）
+  const last=dates[dates.length-1]; const lastWr=wr[wr.length-1];
+  let msg=`直近の練習日: <b>${last}</b>（${byDate[last].length}試合 / 勝率 ${fmt(lastWr,1)}%）`;
+  if(dates.length>=2){
+    const prevWr=wr[wr.length-2];
+    const d=lastWr-prevWr;
+    msg+=` <span class="${d>=0?'pos':'neg'}">${d>=0?'▲':'▼'} 前回(${dates[dates.length-2]})比 ${d>=0?'+':''}${fmt(d,1)}pt</span>`;
+  }
+  box.innerHTML=msg;
 }
 function drawOvChamp(roleFilter){
   destroyCharts(['ovChampChart']);
@@ -531,7 +677,7 @@ function drawP2(){
 // =====================================================================
 //  ページ3：選手詳細
 // =====================================================================
-let P3={player:null, role:null, growth:'csAt10', coachLine:false};
+let P3={player:null, role:null, growth:'csAt10', coachLine:false, viewMode:'game', improveN:10};
 function openDetail(nick){ P3.player=nick; P3.role=null; document.querySelector('nav button[data-page="detail"]').click(); }
 function curP(){ return ALL.find(p=>p.nickname===P3.player); }
 function ensureRole(){ const p=curP(); const rs=p.rolesPlayed||[]; if(!P3.role || !rs.includes(P3.role)) P3.role = p.primaryRole || rs[0] || p.role; }
@@ -543,7 +689,11 @@ function renderDetail(){
   el.innerHTML=`
    <section><div class="controls"><label>選手:</label><select id="p3Sel"></select>
      <label>ロール:</label><select id="p3Role"></select></div>
-     <div id="p3Profile"></div></section>
+     <div id="p3Profile"></div>
+     <div id="p3Badges" style="margin-top:8px"></div></section>
+   <section><h2>良くなったポイント <span class="wl">（直近<span id="p3ImproveNLabel"></span>試合 vs それ以前）</span></h2>
+     <div class="controls"><label>比較する直近試合数:</label><select id="p3ImproveN"><option value="5">5</option><option value="10">10</option><option value="15">15</option></select></div>
+     <div id="p3Improve"></div></section>
    <div class="grid2">
      <section><h2>次に改善したいポイント（${TARGET_TIER}基準）</h2><div id="p3Suggest"></div></section>
      <section><h2>ランク・コーチ比較（主要指標）</h2><div class="scroll"><table id="p3CoachCmp"></table></div>
@@ -552,10 +702,12 @@ function renderDetail(){
    </div>
    <section><h2>成長トラッキング ★最重要</h2>
      <div class="controls"><label>指標:</label><select id="p3Growth"></select>
+       <label>表示:</label><div class="tabs" id="p3ViewMode"><button data-v="game">試合ごと</button><button data-v="date">日別(平均)</button></div>
        <label class="toggle"><input type="checkbox" id="p3Coach"> コーチ線（各コーチ）</label></div>
      <div class="chart-box"><canvas id="p3GrowthChart"></canvas></div>
-     <div class="note">青系の太線=本人の各試合の値（選択ロールのみ）。<b>移動平均(5)</b>＝直近5試合の平均で調子のトレンド。
-       <b>ロール平均</b>＝同ロールを担当した選手全員の平均（比較の基準）。<b>コーチ平均</b>＝コーチ全員の平均（目標の目安）。</div></section>
+     <div class="note">青系の太線=本人の値（選択ロールのみ）。<b>移動平均(5)</b>＝直近5試合の平均で調子のトレンド。
+       <b>ロール平均</b>＝同ロールを担当した選手全員の平均（比較の基準）。<b>コーチ平均</b>＝コーチ全員の平均（目標の目安）。
+       「日別(平均)」表示にすると、練習した日ごとの平均値の推移で見られます。</div></section>
    <section><h2>デスのタイミング分布</h2><div class="chart-sm"><canvas id="p3Death"></canvas></div>
      <div class="note">横軸=試合内の経過時間(2分刻み) / 縦軸=デス合計。集中する時間帯を発見。</div></section>
    <section><h2>レーニング成績（試合ごと）</h2><div class="scroll"><table id="p3Lane"></table></div></section>
@@ -571,6 +723,11 @@ function renderDetail(){
   ['csAt10','deaths','kda','csPerMin','goldDiffAt10','wardsPlaced','dmgShare'].forEach(k=>gs.appendChild(new Option(M[k].l,k)));
   gs.value=P3.growth; gs.onchange=()=>{P3.growth=gs.value; drawGrowth();};
   const cc=document.getElementById('p3Coach'); cc.checked=P3.coachLine; cc.onchange=()=>{P3.coachLine=cc.checked; drawGrowth();};
+  const vm=document.getElementById('p3ViewMode');
+  vm.querySelectorAll('button').forEach(b=>{ if(b.dataset.v===P3.viewMode)b.classList.add('active');
+    b.onclick=()=>{ P3.viewMode=b.dataset.v; vm.querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); drawGrowth(); }; });
+  const inSel=document.getElementById('p3ImproveN'); inSel.value=String(P3.improveN);
+  inSel.onchange=()=>{ P3.improveN=parseInt(inSel.value,10); drawImprovements(); };
   drawP3();
 }
 function fillRoleSel(){
@@ -578,7 +735,32 @@ function fillRoleSel(){
   rsel.innerHTML=rs.map(r=>`<option value="${r}" ${r===P3.role?'selected':''}>${r}（${playerGames(p,r)}試合）</option>`).join('');
   rsel.onchange=()=>{P3.role=rsel.value; drawP3();};
 }
-function drawP3(){ drawProfile(); drawSuggest(); drawCoachCmp(); drawGrowth(); drawDeath(); drawLane(); drawPool(); drawRecent(); }
+function drawP3(){ drawProfile(); drawBadges(); drawImprovements(); drawSuggest(); drawCoachCmp(); drawGrowth(); drawDeath(); drawLane(); drawPool(); drawRecent(); }
+function drawBadges(){
+  const box=document.getElementById('p3Badges'); const ms=roleMatches();
+  const streak=streakInfo(ms); const bests=personalBests(ms);
+  let h='';
+  if(streak && streak.count>=2){
+    h+=`<span class="pill" style="background:${streak.win?'rgba(63,185,80,0.2)':'rgba(240,98,63,0.2)'};color:${streak.win?'var(--good)':'var(--bad)'};font-weight:600">`+
+      `${streak.win?'🔥 '+streak.count+'連勝中':streak.count+'連敗中・切り替えていこう'}</span> `;
+  }
+  bests.forEach(b=>{ h+=`<span class="pill" style="background:rgba(63,185,80,0.2);color:var(--good);font-weight:600">🏆 ${b.label}更新！ (${fmt(b.value,b.d)})</span> `; });
+  box.innerHTML=h;
+}
+function drawImprovements(){
+  document.getElementById('p3ImproveNLabel').textContent=P3.improveN;
+  const p=curP(); const res=improvements(p, P3.role, P3.improveN);
+  const box=document.getElementById('p3Improve');
+  if(res.total<6){ box.innerHTML='<div class="note">比較に十分な試合数がまだありません（6試合以上でここに表示されます）。まずは試合を重ねていきましょう。</div>'; return; }
+  if(!res.list.length){ box.innerHTML='<div class="note">直近の試合で大きく伸びた指標はまだ見当たりません。次の練習で変化が出るか見ていきましょう。</div>'; return; }
+  let h=''; res.list.slice(0,3).forEach((s,i)=>{
+    const arrow = s.diff>=0?'+':'';
+    h+=`<div style="margin-bottom:10px;padding:10px;background:var(--card2);border-left:3px solid var(--good);border-radius:6px">`+
+      `<div><b>${i+1}. ${M[s.k].l}</b> <span class="wl">${fmt(s.earlier,M[s.k].d)}</span> → <span class="pos">${fmt(s.recent,M[s.k].d)}</span> `+
+      `<span class="pos">(${arrow}${fmt(s.diff,M[s.k].d)})</span></div>`+
+      `<div class="note" style="margin-top:4px">${IMPROVE_MSG[s.k]||''}</div></div>`; });
+  box.innerHTML=h;
+}
 function drawSuggest(){
   const p=curP(); const sug=suggestions(p, P3.role);
   const box=document.getElementById('p3Suggest');
@@ -618,9 +800,22 @@ function movingAvg(arr,w=5){ return arr.map((_,i)=>{ const s=arr.slice(Math.max(
 function drawGrowth(){
   destroyCharts(['p3GrowthChart']); const p=curP(); const k=P3.growth; const role=P3.role;
   const ms=roleMatches();
+  const ra=roleAvg(role,k);
+  if(P3.viewMode==='date'){
+    const byDate=groupByDate(ms); const dates=sortedDates(byDate);
+    const vals=dates.map(d=>periodAvg(byDate[d],k));
+    const ds=[{label:M[k].l+'（日別平均）',data:vals,borderColor:teamColor(p.team),backgroundColor:teamColor(p.team),tension:0.2,pointRadius:4,spanGaps:true}];
+    if(ra!=null) ds.push({label:'ロール平均',data:dates.map(()=>ra),borderColor:'#3fb950',borderWidth:1.5,pointRadius:0});
+    if(P3.coachLine){ const cpal=['#c9a23a','#d67ad6']; COACHES.forEach((c,i)=>{ const cv=coachVal(c,k,role);
+      if(cv!=null) ds.push({label:'コーチ:'+c.nickname,data:dates.map(()=>cv),borderColor:cpal[i%cpal.length],borderDash:[6,4],borderWidth:1.5,pointRadius:0}); }); }
+    new Chart('p3GrowthChart',{type:'line',data:{labels:dates,datasets:ds},options:{responsive:true,maintainAspectRatio:false,
+      scales:{x:{title:{display:true,text:'日付'}},y:{title:{display:true,text:M[k].l}}},
+      plugins:{tooltip:{callbacks:{afterLabel:(c)=>{ if(c.datasetIndex!==0)return''; const d=dates[c.dataIndex];
+        return `${byDate[d].length}試合`; }}}}}});
+    return;
+  }
   const vals=ms.map(m=>m[k]);
   const labels=ms.map((m,i)=>i+1);
-  const ra=roleAvg(role,k);
   const ds=[{label:M[k].l,data:vals,borderColor:teamColor(p.team),backgroundColor:teamColor(p.team),tension:0.2,pointRadius:3,spanGaps:true},
     {label:'移動平均(5)',data:movingAvg(vals),borderColor:'#e6e9ef',borderDash:[4,3],pointRadius:0,tension:0.3,spanGaps:true}];
   if(ra!=null) ds.push({label:'ロール平均',data:labels.map(()=>ra),borderColor:'#3fb950',borderWidth:1.5,pointRadius:0});
@@ -808,7 +1003,86 @@ function drawPool2(){
     let added=[]; try{added=JSON.parse(lsGet('profadd:'+nick)||'[]');}catch(e){} if(!added.find(a=>a.id===id)){added.push({id,name:DATA.champMap[id]||id}); lsSet('profadd:'+nick,JSON.stringify(added));} lsSet(profKey(nick,id),'練習中'); drawPool2(); }; });
 }
 
-const RENDER={overview:renderOverview,players:renderPlayers,detail:renderDetail,bench:renderBench,pool:renderPool};
+// =====================================================================
+//  ページ6：使い方ガイド
+// =====================================================================
+const GUIDE_METRIC_DESC = {
+  winrate:'勝った試合の割合。',
+  kda:'(キル+アシスト)÷デス。数字が大きいほど「戦闘で活躍しつつ生き残っている」目安。',
+  deaths:'1試合あたりの平均デス数。少ないほど良い。',
+  csPerMin:'1分あたりのミニオン処理数。レーンでの資源獲得力の目安。',
+  csAt10:'試合開始10分時点のCS(ミニオン処理数)。序盤のファーム力の目安。',
+  goldDiffAt10:'10分時点の、対面（同じロールの相手）とのゴールド差。プラスならリード。',
+  levelDiffAt10:'10分時点の、対面とのレベル差。',
+  dmgPerMin:'1分あたりの与ダメージ（対チャンピオン）。',
+  dmgShare:'チーム全体の与ダメージのうち、自分が占めた割合。',
+  dmgDealt:'1試合あたりの平均与ダメージ（対チャンピオン）。',
+  dmgTaken:'1試合あたりの平均被ダメージ。タンク役などは高くなりやすい。',
+  kp:'キル関与率。チームのキルのうち、自分がキル or アシストで関わった割合。',
+  visionPerMin:'1分あたりの視界スコア。マップ把握への貢献度の目安。',
+  wardsPlaced:'1試合あたりのワード設置数。',
+  controlWards:'1試合あたりのコントロールワード購入・設置数。',
+  death10:'10分時点までのデス数。序盤の被弾（ガンク等）の目安。',
+};
+function renderGuide(){
+  const el=document.getElementById('page-guide');
+  const metricRows = Object.keys(M).map(k=>{
+    const d = GUIDE_METRIC_DESC[k] || '';
+    return `<tr><td>${M[k].l}</td><td style="text-align:left">${d}</td></tr>`;
+  }).join('');
+  el.innerHTML = `
+  <section><h2>このダッシュボードについて</h2>
+    <p>初心者大会に参加する選手・コーチ向けの戦績分析ツールです。Riot Games の公式データ（Riot API）をもとに、
+    各選手の試合結果を自動集計して表示しています。<b>「弱点探し」だけでなく、良くなった点も一緒に確認して、
+    次の練習のモチベーションにしてもらうこと</b>を目的にしています。</p>
+    <p class="note">対象: ${PLAYERS.length}選手 / コーチ${COACHES.length}名 / 総試合数 ${DATA.totals ? DATA.totals.unique_games : '-'} / 最終更新 ${DATA.generatedAt}</p>
+  </section>
+
+  <section><h2>各ページの見方</h2>
+    <table><tr><th>ページ</th><th style="text-align:left">内容</th></tr>
+    <tr><td class="clickable" data-goto="overview">① 大会全体の概要</td><td style="text-align:left">全選手・チームの総合サマリー。<b>日別ハイライト</b>と<b>今、伸びている選手</b>で全体の成長を確認できます。</td></tr>
+    <tr><td class="clickable" data-goto="players">② 選手一覧＆比較</td><td style="text-align:left">同じロール同士で戦績を横並び比較。緑=上位／赤=下位の色分けで一目で分かる。</td></tr>
+    <tr><td class="clickable" data-goto="detail">③ 選手詳細</td><td style="text-align:left"><b>指導の核となるページ。</b>まず<b>良くなったポイント</b>と自己ベスト/連勝バッジで成長を確認し、
+      その後で改善したいポイントや成長トラッキング（試合ごと/日別）、デスの多い時間帯、チャンピオンプール、直近の試合履歴を見られます。選手名クリックでもここに来られます。</td></tr>
+    <tr><td class="clickable" data-goto="bench">④ ロール別ベンチマーク</td><td style="text-align:left">同ロール内での実数値ランキングと、コーチとの比較表。</td></tr>
+    <tr><td class="clickable" data-goto="pool">⑤ チャンピオンプール（習熟度）</td><td style="text-align:left">選手ごとの得意・普通・練習中チャンピオンを一覧表示。アイコンをクリックすると習熟度を切替できます（下記参照）。</td></tr>
+    </table>
+  </section>
+
+  <section><h2>「良くなったポイント」の見方（③選手詳細）</h2>
+    <p>直近の試合（既定10試合、5/15にも変更可）と、それより前の試合を比較して、<b>伸びている指標</b>を上位3つ表示します。
+    数字が「悪かった頃→良くなった今」の形で並ぶので、練習の成果を実感しやすくなっています。
+    十分な試合数（6試合以上）が無い場合や、まだ大きな伸びが見えない場合はその旨を表示します。</p>
+    <p class="note">①の「今、伸びている選手」は、全選手の中で最も伸び幅が大きかった人をピックアップしたものです。コーチが練習の最後に一言褒める際のヒントにどうぞ。</p>
+  </section>
+
+  <section><h2>⑤ 習熟度アイコンの操作方法</h2>
+    <p>⑤ページのチャンピオンアイコンは、<b>クリックするたびに 得意→普通→練習中 と切り替わります</b>。
+    アイコン右上に出る「×」をクリックするとそのチャンプを一覧から除外できます。
+    使ったことのないチャンピオンを追加したい場合は、選手名の横の入力欄にチャンピオン名を入力して追加してください。</p>
+    <p class="note">この変更は<b>あなたが今見ているブラウザにのみ保存</b>されます（localStorage）。他の人の画面には反映されません。
+    最初は戦績（5戦以上=得意 / 2〜4戦=普通 / 1戦=練習中）から自動で分類されています。</p>
+  </section>
+
+  <section><h2>指標の意味（用語集）</h2>
+    <div class="scroll"><table><tr><th>指標</th><th style="text-align:left">意味</th></tr>${metricRows}</table></div>
+    <p class="note">「@10」が付く指標は試合開始10分時点の値、「ロール平均」は同じロールを担当した選手全員の平均、
+    「移動平均」は直近5試合の平均（調子のトレンドを見るための線）です。</p>
+  </section>
+
+  <section><h2>よくある質問（Q&A）</h2>
+    <p><b>Q. 自分の試合が反映されていません</b><br>A. データの更新は運営（コーチ）が手動で行っています。最新の試合が反映されるまで少し時間がかかることがあります。</p>
+    <p><b>Q. 数字が想定より少ないです</b><br>A. このダッシュボードは<b>自分の指定ロール（担当レーン）で担当した試合のみ</b>を集計しています。
+    別のロールで遊んだ試合や、対AI（Co-op vs AI）の試合は含まれません。</p>
+    <p><b>Q. CS@10などが空欄です</b><br>A. その試合の詳細データ（タイムライン）がまだ取得されていない可能性があります。次回更新で反映されます。</p>
+    <p><b>Q. ランク帯の基準値はどこから来ていますか？</b><br>A. 公開されている統計の近似値です。目安として使ってください（完全に正確な値ではありません）。</p>
+    <p><b>Q. 「良くなったポイント」に何も出ません</b><br>A. まだ試合数が少ない（6試合未満）か、直近で大きな伸びが無い状態です。試合を重ねるうちに表示されるようになります。</p>
+  </section>
+  `;
+  el.querySelectorAll('[data-goto]').forEach(t=>{ t.onclick=()=>{ document.querySelector(`nav button[data-page="${t.dataset.goto}"]`).click(); }; });
+}
+
+const RENDER={overview:renderOverview,players:renderPlayers,detail:renderDetail,bench:renderBench,pool:renderPool,guide:renderGuide};
 renderOverview();
 </script>
 </body>
