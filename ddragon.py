@@ -15,7 +15,15 @@ def _version_path(cfg):
     return os.path.join(cfg["data_dir"], "ddragon_version.txt")
 
 
+def _tags_path(cfg):
+    return os.path.join(cfg["data_dir"], "champion_tags.json")
+
+
 def fetch_champion_names(cfg, lang="ja_JP", timeout=15):
+    """日本語名を取得・キャッシュする。同じAPI応答からチャンピオンのタグ
+    (Fighter/Tank/Mage/Marksman/Assassin/Support)も合わせて取得し、
+    data/champion_tags.json にキャッシュする（レーン×チャンピオンの指標調整に使用）。
+    """
     out_path = os.path.join(cfg["data_dir"], "champion_names_ja.json")
     try:
         vers = requests.get("https://ddragon.leagueoflegends.com/api/versions.json",
@@ -25,8 +33,11 @@ def fetch_champion_names(cfg, lang="ja_JP", timeout=15):
             f"https://ddragon.leagueoflegends.com/cdn/{ver}/data/{lang}/champion.json",
             timeout=timeout).json()
         m = {cid: info["name"] for cid, info in data["data"].items()}
+        tags = {cid: info.get("tags", []) for cid, info in data["data"].items()}
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(m, f, ensure_ascii=False)
+        with open(_tags_path(cfg), "w", encoding="utf-8") as f:
+            json.dump(tags, f, ensure_ascii=False)
         with open(_version_path(cfg), "w", encoding="utf-8") as f:
             f.write(ver)
         print(f"チャンピオン日本語名を取得: {len(m)}体 (v{ver})")
@@ -34,6 +45,15 @@ def fetch_champion_names(cfg, lang="ja_JP", timeout=15):
     except Exception as e:
         print(f"  [情報] チャンピオン名の取得に失敗（オフライン等）: {e}。フォールバックを使用します。")
         return None
+
+
+def load_champion_tags(cfg):
+    """キャッシュ済みのチャンピオンタグ({英語ID: [タグ,...]})を返す。無ければ空dict。"""
+    try:
+        with open(_tags_path(cfg), "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 def get_version(cfg):

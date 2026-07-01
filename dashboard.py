@@ -23,31 +23,62 @@ MATCH_FIELDS = [
 ]
 
 
+# ロールごとの「重要指標」。全員共通のもの＋各レーン固有のものを合わせて使う。
+# ③選手詳細のカード表示・「良くなったポイント」・「次に改善したいポイント」で
+# 自分のロールに関係ない指標の伸びを過大評価しないように使う。
+ROLE_PRIORITY_METRICS = {
+    "common": ["winrate", "csAt10", "visionPerMin"],
+    "byRole": {
+        "Top": ["goldDiffAt10", "levelDiffAt10"],
+        "Mid": ["goldDiffAt10", "levelDiffAt10"],
+        "Jungle": ["kp", "deaths"],
+        "Bot": ["csPerMin", "deaths", "dmgShare"],
+        "Support": ["kp", "wardsPlaced", "controlWards"],
+    },
+}
+
 # ブロンズ〜シルバー帯のおおよそのベンチマーク（編集可能: benchmarks.json で上書き）
+# 勝率(winrate)はマッチメイキングにより誰でも平均50%に寄るため、ランク帯基準の
+# 目標値としては馴染まないのでベンチマーク対象には含めない（重要指標としては別途使用）。
 DEFAULT_BENCH = {
     "metrics": ["kda", "csPerMin", "kp", "deaths"],
     "targetTier": "Silver",
     "tiers": {
         "Bronze": {
-            "Top": {"kda": 2.0, "csPerMin": 5.2, "kp": 45, "deaths": 6.2},
-            "Jungle": {"kda": 2.1, "csPerMin": 4.2, "kp": 52, "deaths": 6.0},
-            "Mid": {"kda": 2.1, "csPerMin": 5.4, "kp": 50, "deaths": 6.2},
-            "Bot": {"kda": 2.2, "csPerMin": 5.6, "kp": 50, "deaths": 6.0},
-            "Support": {"kda": 2.2, "csPerMin": 0.9, "kp": 55, "deaths": 6.5},
+            "Top": {"kda": 2.0, "csPerMin": 5.2, "kp": 45, "deaths": 6.2,
+                     "csAt10": 62, "visionPerMin": 0.9, "goldDiffAt10": -150, "levelDiffAt10": -0.3},
+            "Jungle": {"kda": 2.1, "csPerMin": 4.2, "kp": 52, "deaths": 6.0,
+                        "csAt10": 38, "visionPerMin": 1.0},
+            "Mid": {"kda": 2.1, "csPerMin": 5.4, "kp": 50, "deaths": 6.2,
+                     "csAt10": 65, "visionPerMin": 0.9, "goldDiffAt10": -150, "levelDiffAt10": -0.3},
+            "Bot": {"kda": 2.2, "csPerMin": 5.6, "kp": 50, "deaths": 6.0,
+                     "csAt10": 68, "visionPerMin": 0.8, "dmgShare": 22},
+            "Support": {"kda": 2.2, "csPerMin": 0.9, "kp": 55, "deaths": 6.5,
+                         "csAt10": 8, "visionPerMin": 1.8, "wardsPlaced": 12, "controlWards": 1.2},
         },
         "Silver": {
-            "Top": {"kda": 2.2, "csPerMin": 5.6, "kp": 47, "deaths": 5.9},
-            "Jungle": {"kda": 2.3, "csPerMin": 4.6, "kp": 55, "deaths": 5.7},
-            "Mid": {"kda": 2.3, "csPerMin": 5.9, "kp": 52, "deaths": 5.9},
-            "Bot": {"kda": 2.4, "csPerMin": 6.1, "kp": 52, "deaths": 5.7},
-            "Support": {"kda": 2.4, "csPerMin": 1.0, "kp": 58, "deaths": 6.2},
+            "Top": {"kda": 2.2, "csPerMin": 5.6, "kp": 47, "deaths": 5.9,
+                     "csAt10": 68, "visionPerMin": 1.0, "goldDiffAt10": 0, "levelDiffAt10": 0.0},
+            "Jungle": {"kda": 2.3, "csPerMin": 4.6, "kp": 55, "deaths": 5.7,
+                        "csAt10": 44, "visionPerMin": 1.1},
+            "Mid": {"kda": 2.3, "csPerMin": 5.9, "kp": 52, "deaths": 5.9,
+                     "csAt10": 71, "visionPerMin": 1.0, "goldDiffAt10": 0, "levelDiffAt10": 0.0},
+            "Bot": {"kda": 2.4, "csPerMin": 6.1, "kp": 52, "deaths": 5.7,
+                     "csAt10": 74, "visionPerMin": 0.9, "dmgShare": 25},
+            "Support": {"kda": 2.4, "csPerMin": 1.0, "kp": 58, "deaths": 6.2,
+                         "csAt10": 12, "visionPerMin": 2.1, "wardsPlaced": 15, "controlWards": 1.6},
         },
         "Gold": {
-            "Top": {"kda": 2.4, "csPerMin": 6.0, "kp": 49, "deaths": 5.6},
-            "Jungle": {"kda": 2.5, "csPerMin": 5.0, "kp": 57, "deaths": 5.4},
-            "Mid": {"kda": 2.5, "csPerMin": 6.3, "kp": 54, "deaths": 5.6},
-            "Bot": {"kda": 2.6, "csPerMin": 6.6, "kp": 54, "deaths": 5.4},
-            "Support": {"kda": 2.6, "csPerMin": 1.2, "kp": 60, "deaths": 5.9},
+            "Top": {"kda": 2.4, "csPerMin": 6.0, "kp": 49, "deaths": 5.6,
+                     "csAt10": 74, "visionPerMin": 1.1, "goldDiffAt10": 150, "levelDiffAt10": 0.3},
+            "Jungle": {"kda": 2.5, "csPerMin": 5.0, "kp": 57, "deaths": 5.4,
+                        "csAt10": 50, "visionPerMin": 1.3},
+            "Mid": {"kda": 2.5, "csPerMin": 6.3, "kp": 54, "deaths": 5.6,
+                     "csAt10": 77, "visionPerMin": 1.1, "goldDiffAt10": 150, "levelDiffAt10": 0.3},
+            "Bot": {"kda": 2.6, "csPerMin": 6.6, "kp": 54, "deaths": 5.4,
+                     "csAt10": 80, "visionPerMin": 1.0, "dmgShare": 28},
+            "Support": {"kda": 2.6, "csPerMin": 1.2, "kp": 60, "deaths": 5.9,
+                         "csAt10": 16, "visionPerMin": 2.4, "wardsPlaced": 18, "controlWards": 2.0},
         },
     },
 }
@@ -63,7 +94,7 @@ def load_benchmarks(cfg):
         return DEFAULT_BENCH
 
 
-def build_payload(records, cfg=None, champ_map=None):
+def build_payload(records, cfg=None, champ_map=None, champ_tags=None):
     players = []
     unique_ids = set()
     champ_set = set()
@@ -103,6 +134,8 @@ def build_payload(records, cfg=None, champ_map=None):
         "ddragonVersion": version or "15.1.1",
         "players": players,
         "champMap": champ_map or {},
+        "champTags": champ_tags or {},
+        "rolePriority": ROLE_PRIORITY_METRICS,
         "totals": {
             "n_players": n_players,
             "unique_games": len(unique_ids),
@@ -112,8 +145,8 @@ def build_payload(records, cfg=None, champ_map=None):
     }
 
 
-def generate(cfg, records, champ_map=None):
-    payload = build_payload(records, cfg, champ_map)
+def generate(cfg, records, champ_map=None, champ_tags=None):
+    payload = build_payload(records, cfg, champ_map, champ_tags)
     html = HTML_TEMPLATE.replace("__DATA__", json.dumps(payload, ensure_ascii=False))
     out_path = os.path.join(cfg["output_dir"], "dashboard.html")
     with open(out_path, "w", encoding="utf-8") as f:
@@ -155,6 +188,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .stat .l{font-size:11px;color:var(--muted);margin-bottom:2px;}
   .stat .sub{font-size:11px;color:var(--muted);margin-top:4px;}
   .stat .up{color:var(--good);} .stat .down{color:var(--bad);}
+  .stat-priority{border-color:var(--accent);background:rgba(91,141,239,0.10);}
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th,td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;}
   th:first-child,td:first-child{text-align:left;}
@@ -334,6 +368,33 @@ function radarRange(vals){
 }
 function destroyCharts(ids){ ids.forEach(id=>{ const c=Chart.getChart(id); if(c) c.destroy(); }); }
 
+// ===== ロール別「重要指標」（全員共通＋レーン固有）＝ 自分のロールに関係ない指標の
+// 伸びを過大評価しないための重み付けに使う。チャンピオンのアーキタイプ(タグ)が
+// 分かる場合は、それに応じた指標もゆるく追加する（レーン×チャンピオンの微調整）。
+const ROLE_PRIORITY = DATA.rolePriority || {common:[], byRole:{}};
+const CHAMP_TAGS = DATA.champTags || {};   // {championId: ['Tank','Fighter', ...]} (Data Dragon由来、無ければ空)
+// タグ別に「この手のチャンピオンなら合わせて見たい指標」をゆるく追加する（控えめな調整）
+const TAG_METRIC_BOOST = {
+  Support: ['visionPerMin','wardsPlaced','controlWards'],
+  Marksman: ['dmgShare','csPerMin'],
+  Mage: ['dmgShare'],
+  Assassin: ['kda'],
+  Tank: [],
+  Fighter: [],
+};
+function champPrimaryTag(champId){ const tags=CHAMP_TAGS[champId]; return (tags && tags.length) ? tags[0] : null; }
+// role(＋任意でchampId)の重要指標一覧（重複除去）。opts.forBench=true なら勝率を除く
+// （勝率はマッチメイキングで誰でも平均50%に寄るためランク帯比較には使わない）。
+function roleMetrics(role, opts, champId){
+  const common = ROLE_PRIORITY.common || [];
+  const specific = (role && ROLE_PRIORITY.byRole && ROLE_PRIORITY.byRole[role]) || [];
+  let list = [...common, ...specific];
+  const tag = champId ? champPrimaryTag(champId) : null;
+  if(tag && TAG_METRIC_BOOST[tag]) list = list.concat(TAG_METRIC_BOOST[tag]);
+  if(opts && opts.forBench) list = list.filter(k=>k!=='winrate');
+  return [...new Set(list)].filter(k=>M[k]);
+}
+
 // ===== ベンチマーク（ブロンズ〜シルバー）＋ 改善提案 =====
 const BENCH = DATA.benchmarks || {};
 const BENCH_METRICS = BENCH.metrics || ['kda','csPerMin','kp','deaths'];
@@ -354,9 +415,12 @@ const BENCH_TIPS = {
   wardsPlaced:'トリンケット/コントロールを切らさず設置する習慣を。',
 };
 // 改善提案: 目標ランク帯(既定Silver)に未達の指標を、未達度が大きい順に返す
+// 指標セットはそのロールの「重要指標」を優先的に使い、ベンチ値が無い指標は
+// BENCH_METRICS（従来の共通4指標）で補う。
 function suggestions(p, role){
   const out=[];
-  BENCH_METRICS.forEach(k=>{ if(!M[k])return; const t=benchVal(TARGET_TIER, role, k), v=aggVal(p,k,role); if(v==null||t==null)return;
+  const keys = [...new Set([...roleMetrics(role, {forBench:true}), ...BENCH_METRICS])];
+  keys.forEach(k=>{ if(!M[k])return; const t=benchVal(TARGET_TIER, role, k), v=aggVal(p,k,role); if(v==null||t==null)return;
     const short = M[k].hi ? (t-v)/(Math.abs(t)||1) : (v-t)/(Math.abs(t)||1);
     if(short>0.02) out.push({k,v,t,short,tip:BENCH_TIPS[k]||''}); });
   out.sort((a,b)=>b.short-a.short); return out;
@@ -409,6 +473,9 @@ function improvements(p, role, n){
   const recentN = Math.min(n, Math.floor(total/2));
   const recent = ms.slice(total-recentN);
   const earlier = ms.slice(0, total-recentN);
+  // そのロールの重要指標は伸びを1.5倍で評価し、ロールに関係ない指標の伸びが
+  // 優先的に上位表示されないようにする（自分のロールに関係ない伸びは影響力が薄いため）。
+  const priority = new Set(roleMetrics(role));
   const out=[];
   IMPROVE_METRICS.forEach(k=>{
     if(!M[k]) return;
@@ -419,9 +486,10 @@ function improvements(p, role, n){
     if(!good) return;
     const relImprove = Math.abs(diff)/(Math.abs(ev)||1);
     if(relImprove < 0.03) return;   // 3%未満のブレはノイズとして無視
-    out.push({k, recent:rv, earlier:ev, diff, relImprove});
+    const isPriority = priority.has(k);
+    out.push({k, recent:rv, earlier:ev, diff, relImprove, isPriority, weighted: relImprove*(isPriority?1.5:1)});
   });
-  out.sort((a,b)=>b.relImprove-a.relImprove);
+  out.sort((a,b)=>b.weighted-a.weighted);
   return {list:out, recentN, earlierN:earlier.length, total};
 }
 
@@ -592,11 +660,12 @@ function drawOvGoodPlay(){
   });
   const periodNote = `<div class="note" style="margin-bottom:8px">対象期間: ${recentDates.join(' , ')}（直近2日間の練習日にプレイした選手）</div>`;
   if(!picks.length){ box.innerHTML=periodNote+'<div class="note">条件に合う選手の中で、比較に十分な試合数がある人がまだいません。</div>'; return; }
-  picks.sort((a,b)=>b.top.relImprove-a.top.relImprove);
+  // ロールの重要指標(weighted)で選手間を比較。無関係な指標の伸びが上位に来ないようにする。
+  picks.sort((a,b)=>b.top.weighted-a.top.weighted);
   let h=periodNote+'<div class="cards">';
   picks.slice(0,3).forEach(({p,role,top})=>{
     h+=`<div class="stat" style="border-left:3px solid var(--good)"><div class="l">${p.nickname} <span class="wl">(${p.team} / ${role})</span></div>`+
-      `<div class="n" style="font-size:16px">${M[top.k].l} <span class="pos">${top.diff>=0?'+':''}${fmt(top.diff,M[top.k].d)}</span></div>`+
+      `<div class="n" style="font-size:16px">${top.isPriority?'★ ':''}${M[top.k].l} <span class="pos">${top.diff>=0?'+':''}${fmt(top.diff,M[top.k].d)}</span></div>`+
       `<div class="sub">${fmt(top.earlier,M[top.k].d)} → ${fmt(top.recent,M[top.k].d)}</div></div>`;
   });
   h+='</div>';
@@ -830,7 +899,7 @@ function drawImprovements(){
   let h=''; res.list.slice(0,3).forEach((s,i)=>{
     const arrow = s.diff>=0?'+':'';
     h+=`<div style="margin-bottom:10px;padding:10px;background:var(--card2);border-left:3px solid var(--good);border-radius:6px">`+
-      `<div><b>${i+1}. ${M[s.k].l}</b> <span class="wl">${fmt(s.earlier,M[s.k].d)}</span> → <span class="pos">${fmt(s.recent,M[s.k].d)}</span> `+
+      `<div><b>${i+1}. ${s.isPriority?'★ ':''}${M[s.k].l}</b> <span class="wl">${fmt(s.earlier,M[s.k].d)}</span> → <span class="pos">${fmt(s.recent,M[s.k].d)}</span> `+
       `<span class="pos">(${arrow}${fmt(s.diff,M[s.k].d)})</span></div>`+
       `<div class="note" style="margin-top:4px">${IMPROVE_MSG[s.k]||''}</div></div>`; });
   box.innerHTML=h;
@@ -848,25 +917,42 @@ function drawSuggest(){
 function drawCoachCmp(){
   const p=curP(); const role=P3.role;
   // 主要指標を、選手 / ランク帯(Bronze・Silver・Gold) / 各コーチ で横並び比較
+  // 指標セットはそのロールの重要指標を優先し、ベンチ値が無いものはBENCH_METRICSで補う。
+  const keys = [...new Set([...roleMetrics(role, {forBench:true}), ...BENCH_METRICS])];
+  const priority = new Set(roleMetrics(role, {forBench:true}));
   let h='<tr><th>指標</th><th>'+p.nickname+'</th>'+
     BENCH_TIERS.map(t=>`<th>${t}${t===TARGET_TIER?' ★':''}</th>`).join('')+
     COACHES.map(c=>`<th>${c.nickname}<span class="wl"> (${coachRoleLabel(c)})</span></th>`).join('')+'</tr>';
-  BENCH_METRICS.forEach(k=>{ if(!M[k])return; const v=aggVal(p,k,role); const tgt=benchVal(TARGET_TIER,role,k);
+  keys.forEach(k=>{ if(!M[k])return; const v=aggVal(p,k,role); const tgt=benchVal(TARGET_TIER,role,k);
     const better=(v==null||tgt==null)?null:(M[k].hi? v>=tgt : v<=tgt);   // 選手が目標ランク以上か
     const pcol=better==null?'':(better?'var(--good)':'var(--bad)');
-    h+=`<tr><td>${M[k].l}</td><td style="color:${pcol};font-weight:600">${fmt(v,M[k].d)}</td>`+
+    h+=`<tr><td>${priority.has(k)?'★ ':''}${M[k].l}</td><td style="color:${pcol};font-weight:600">${fmt(v,M[k].d)}</td>`+
       BENCH_TIERS.map(t=>`<td class="wl">${fmt(benchVal(t,role,k),M[k].d)}</td>`).join('')+
       COACHES.map(c=>`<td class="wl">${fmt(coachVal(c,k,role),M[k].d)}</td>`).join('')+'</tr>'; });
   document.getElementById('p3CoachCmp').innerHTML=h;
 }
+// プロフィールカードに出す指標一覧。そのロールの重要指標を先頭に、
+// 残りの標準指標(未使用のもの)を後ろに続ける（最大8枚まで）。
+function profileCardMetrics(role){
+  const priority = roleMetrics(role);
+  const extras = ['kda','deaths','csPerMin','csAt10','wardsPlaced'];
+  const list = [...priority];
+  const seen = new Set(priority);
+  extras.forEach(k=>{ if(!seen.has(k) && list.length<8){ seen.add(k); list.push(k); } });
+  return list;
+}
 function drawProfile(){
-  const p=curP(); const role=P3.role; const cards=[['winrate','勝率',1],['kda','平均KDA',2],['csPerMin','CS/min',1],['deaths','平均デス',1],['wardsPlaced','ワード/試合',1],['csAt10','平均CS@10',1]];
-  let h=`<div style="margin-bottom:10px"><b style="font-size:16px">${p.nickname}</b> <span class="pill">${p.team}</span> <span class="pill">${role}</span> <span class="wl">${playerGames(p,role)}試合</span></div><div class="cards">`;
-  cards.forEach(([k,lab,d])=>{ const v=aggVal(p,k,role); const ra=roleAvg(role,k); const m=M[k];
+  const p=curP(); const role=P3.role;
+  const priority = new Set(roleMetrics(role));
+  const keys = profileCardMetrics(role);
+  let h=`<div style="margin-bottom:10px"><b style="font-size:16px">${p.nickname}</b> <span class="pill">${p.team}</span> <span class="pill">${role}</span> <span class="wl">${playerGames(p,role)}試合</span></div>`+
+    `<div class="note" style="margin-bottom:8px">★=${role}の重要指標: ${[...priority].map(k=>M[k]?M[k].l:k).join(' / ')}</div><div class="cards">`;
+  keys.forEach(k=>{ const m=M[k]; if(!m) return; const v=aggVal(p,k,role); const ra=roleAvg(role,k);
     const better = ra!=null&&v!=null ? (m.hi ? v>=ra : v<=ra) : null;
     const arrow = better==null?'':(better?'<span class="up">▲</span>':'<span class="down">▼</span>');
-    h+=`<div class="stat"><div class="l">${lab}</div><div class="n">${fmt(v,d)}${k==='winrate'?'%':''}</div>`+
-       `<div class="sub">${roleRank(p,k,role)}</div><div class="sub">ロール平均: ${fmt(ra,d)} ${arrow}</div></div>`; });
+    const isPriority = priority.has(k);
+    h+=`<div class="stat ${isPriority?'stat-priority':''}"><div class="l">${isPriority?'★ ':''}${m.l}</div><div class="n">${fmt(v,m.d)}${k==='winrate'?'%':''}</div>`+
+       `<div class="sub">${roleRank(p,k,role)}</div><div class="sub">ロール平均: ${fmt(ra,m.d)} ${arrow}</div></div>`; });
   h+='</div>';
   document.getElementById('p3Profile').innerHTML=h;
 }
@@ -1010,11 +1096,15 @@ function profPool(p, role){
   return (p.byRole && p.primaryRole && p.byRole[p.primaryRole]) ? p.byRole[p.primaryRole].champ_pool : (p.champ_pool||[]);
 }
 function teamCoaches(team){ return COACHES.filter(p=>p.team===team); }
+// Data Dragonのタグを日本語に（レーン×チャンピオンの参考表示用。取得できない場合は表示しない）
+const TAG_JA = {Fighter:'ファイター', Tank:'タンク', Mage:'メイジ', Assassin:'アサシン', Marksman:'マークスマン', Support:'サポート'};
 function champStatsTable(pool){
   if(!pool||!pool.length) return '<div class="wl" style="padding:4px 0">データなし</div>';
-  let h='<table class="ugg" style="margin-top:6px;font-size:12px"><tr><th>チャンプ</th><th>使用</th><th>勝率</th><th>KDA</th><th>CS/min</th><th>平均Dmg</th></tr>';
+  const hasTags = Object.keys(CHAMP_TAGS).length>0;
+  let h='<table class="ugg" style="margin-top:6px;font-size:12px"><tr><th>チャンプ</th>'+(hasTags?'<th>タイプ</th>':'')+'<th>使用</th><th>勝率</th><th>KDA</th><th>CS/min</th><th>平均Dmg</th></tr>';
   pool.forEach(c=>{ const wc=c.winrate>=52?'var(--good)':(c.winrate<48?'var(--bad)':'var(--text)');
-    h+=`<tr><td style="text-align:left">${champCell(c.champ,c.champId)}</td><td>${c.plays}</td><td style="color:${wc}">${fmt(c.winrate,0)}% <span class="wl">${c.wins}W${c.losses}L</span></td><td>${fmt(c.kda,2)}</td><td>${fmt(c.csPerMin,1)}</td><td>${(c.avgDmg||0).toLocaleString()}</td></tr>`; });
+    const tag = champPrimaryTag(c.champId); const tagCell = hasTags?`<td class="wl">${tag?(TAG_JA[tag]||tag):'-'}</td>`:'';
+    h+=`<tr><td style="text-align:left">${champCell(c.champ,c.champId)}</td>${tagCell}<td>${c.plays}</td><td style="color:${wc}">${fmt(c.winrate,0)}% <span class="wl">${c.wins}W${c.losses}L</span></td><td>${fmt(c.kda,2)}</td><td>${fmt(c.csPerMin,1)}</td><td>${(c.avgDmg||0).toLocaleString()}</td></tr>`; });
   return h+'</table>';
 }
 function nameToId(name){ const e=Object.entries(DATA.champMap||{}).find(([id,n])=>n===name||id===name); return e?e[0]:null; }
@@ -1132,6 +1222,22 @@ function renderGuide(){
     <p class="note">①の「今、伸びている選手」は、直近2日間の練習日にプレイした選手の中から、最も伸び幅が大きかった人をピックアップしたものです。ロール・チームで絞り込みも可能。コーチが練習の最後に一言褒める際のヒントにどうぞ。</p>
   </section>
 
+  <section><h2>★ ロールごとの「重要指標」について</h2>
+    <p>ロールによって重視すべき指標は異なるため、各レーンの★重要指標を以下のとおり設定しています。
+    ③選手詳細のプロフィールカードで★マークが付いている指標がそれにあたり、「良くなったポイント」「今、伸びている選手」
+    「次に改善したいポイント」でも、自分のロールに関係ない指標の伸び・提案が優先的に出ないよう重み付けしています。</p>
+    <table><tr><th>ロール</th><th style="text-align:left">重要指標</th></tr>
+    <tr><td>全ロール共通</td><td style="text-align:left">勝率 / CS@10 / 視界スコア/min</td></tr>
+    <tr><td>Top・Mid</td><td style="text-align:left">（共通に加えて）ゴールド差@10 / レベル差@10</td></tr>
+    <tr><td>Jungle</td><td style="text-align:left">（共通に加えて）キル関与率 / 平均デス</td></tr>
+    <tr><td>Bot</td><td style="text-align:left">（共通に加えて）CS/min / 平均デス / ダメージシェア</td></tr>
+    <tr><td>Support</td><td style="text-align:left">（共通に加えて）キル関与率 / ワード設置/試合 / コントロールW/試合</td></tr>
+    </table>
+    <p class="note">チャンピオンプール（⑤・③）にはチャンピオンの「タイプ」（サポート/タンク/マークスマン等）も表示され、
+    レーン内でもチャンピオンによって役割が異なることの参考にできます（Data Dragonから取得。オフライン環境等で取得できない場合は非表示）。
+    ロールやチャンピオンによる重視指標の設定は<code>dashboard.py</code>の<code>ROLE_PRIORITY_METRICS</code>で調整できます。</p>
+  </section>
+
   <section><h2>⑤ 習熟度アイコンの操作方法</h2>
     <p>⑤ページのチャンピオンアイコンは、<b>クリックするたびに 得意→普通→練習中 と切り替わります</b>。
     アイコン右上に出る「×」をクリックするとそのチャンプを一覧から除外できます。
@@ -1149,7 +1255,8 @@ function renderGuide(){
   <section><h2>よくある質問（Q&A）</h2>
     <p><b>Q. 自分の試合が反映されていません</b><br>A. データの更新は運営（コーチ）が手動で行っています。最新の試合が反映されるまで少し時間がかかることがあります。</p>
     <p><b>Q. 数字が想定より少ないです</b><br>A. このダッシュボードは<b>自分の指定ロール（担当レーン）で担当した試合のみ</b>を集計しています。
-    別のロールで遊んだ試合や、対AI（Co-op vs AI）の試合は含まれません。</p>
+    別のロールで遊んだ試合、対AI（Co-op vs AI）の試合、ARAM/アリーナ/スワーム等の特殊モードの試合は含まれません
+    （ノーマル・スイフトプレイ・ランクのサモナーズリフト対戦のみを集計対象としています）。</p>
     <p><b>Q. CS@10などが空欄です</b><br>A. その試合の詳細データ（タイムライン）がまだ取得されていない可能性があります。次回更新で反映されます。</p>
     <p><b>Q. ランク帯の基準値はどこから来ていますか？</b><br>A. 公開されている統計の近似値です。目安として使ってください（完全に正確な値ではありません）。</p>
     <p><b>Q. 「良くなったポイント」に何も出ません</b><br>A. まだ試合数が少ない（6試合未満）か、直近で大きな伸びが無い状態です。試合を重ねるうちに表示されるようになります。</p>

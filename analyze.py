@@ -94,6 +94,8 @@ def build_player_records(cfg, players, puuids, match_ids):
                 continue
             if metrics.is_bot_match(match):   # AI戦（Co-op vs AI）は除外
                 continue
+            if not metrics.is_allowed_queue(match):   # ノーマル/スイフトプレイ/ランク以外は除外
+                continue
             part = metrics.find_participant(match, puuid)
             if part is None:
                 continue
@@ -238,13 +240,15 @@ def main():
     # チャンピオン名を日本語化
     champ_map = load_champ_map(cfg)
     localize_champions(records, champ_map)
+    # チャンピオンのアーキタイプ(Tank/Mage/Marksman等)。取得できなければ空dict（機能スキップ）。
+    champ_tags = ddragon.load_champion_tags(cfg)
 
     write_csvs(cfg, records)
     total_games = sum(pr["agg"]["games"] for pr in records)
     print(f"選手数: {len(records)} / 総試合行数: {total_games}")
     print(f"CSV出力先: {cfg['output_dir']}")
 
-    dashboard.generate(cfg, records, champ_map)
+    dashboard.generate(cfg, records, champ_map, champ_tags)
     print("ダッシュボード生成完了: output/dashboard.html")
 
 

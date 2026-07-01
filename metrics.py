@@ -30,6 +30,15 @@ def safe_div(a, b):
 # Co-op vs AI（対AI / BOT戦）のキューID
 BOT_QUEUES = {31, 32, 33, 830, 840, 850, 870, 880, 890}
 
+# 集計対象に含めるキューID（ノーマル・スイフトプレイ・ランクのみ）。
+# ARAM/Arena/Swarm/ARURF/Nexus Blitz/Ultimate Spellbook/Clash等の特殊モードは
+# レーン(TOP/JUNGLE/MIDDLE/BOTTOM/UTILITY)の概念が異なったり、championNameが
+# イベント固有の値になる場合があり(例: "Strawberry_Seraphine"のような紛れ込み)、
+# 通常のロール別戦績分析には適さないため除外する。
+# 400: ノーマル(ドラフト) / 430: ノーマル(ブラインド) / 490: ノーマル(クイックプレイ)
+# 480: スイフトプレイ / 420: ランクソロ / 440: ランクフレックス
+ALLOWED_QUEUES = {400, 430, 490, 480, 420, 440}
+
 
 def is_bot_match(match):
     """対AI戦（Co-op vs AI）かどうか。queueId または BOT参加者で判定。"""
@@ -41,6 +50,16 @@ def is_bot_match(match):
         if p.get("puuid") == "BOT":
             return True
     return False
+
+
+def is_allowed_queue(match):
+    """集計対象のキュー（ノーマル/スイフトプレイ/ランク）かどうか。
+
+    ARAM・Arena・Swarm・ARURF・Nexus Blitz等の特殊モードはここで除外する。
+    queueId が取得できない古い/壊れたデータは安全側に倒して除外する。
+    """
+    info = match.get("info", {})
+    return info.get("queueId") in ALLOWED_QUEUES
 
 
 def find_participant(match, puuid):
