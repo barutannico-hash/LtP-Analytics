@@ -25,13 +25,30 @@ MATCH_FIELDS = [
 
 # ブロンズ〜シルバー帯のおおよそのベンチマーク（編集可能: benchmarks.json で上書き）
 DEFAULT_BENCH = {
-    "tier": "Bronze〜Silver",
-    "roles": {
-        "Top":     {"csPerMin": 6.0, "csAt10": 60, "deaths": 6.0, "death10": 1.0, "kda": 2.0, "goldDiffAt10": 0, "killParticipation": 45, "dmgShare": 24, "visionPerMin": 0.5, "wardsPlaced": 8, "controlWards": 2},
-        "Jungle":  {"csPerMin": 4.5, "csAt10": 50, "deaths": 6.0, "death10": 1.0, "kda": 2.2, "goldDiffAt10": 0, "killParticipation": 55, "dmgShare": 20, "visionPerMin": 0.7, "wardsPlaced": 9, "controlWards": 3},
-        "Mid":     {"csPerMin": 6.2, "csAt10": 62, "deaths": 6.0, "death10": 1.0, "kda": 2.3, "goldDiffAt10": 0, "killParticipation": 50, "dmgShare": 26, "visionPerMin": 0.6, "wardsPlaced": 8, "controlWards": 2},
-        "Bot":     {"csPerMin": 6.5, "csAt10": 62, "deaths": 5.5, "death10": 0.8, "kda": 2.4, "goldDiffAt10": 0, "killParticipation": 50, "dmgShare": 26, "visionPerMin": 0.5, "wardsPlaced": 8, "controlWards": 2},
-        "Support": {"csPerMin": 1.0, "csAt10": 12, "deaths": 6.5, "death10": 1.0, "kda": 2.2, "goldDiffAt10": 0, "killParticipation": 55, "dmgShare": 12, "visionPerMin": 1.3, "wardsPlaced": 18, "controlWards": 4},
+    "metrics": ["kda", "csPerMin", "kp", "deaths"],
+    "targetTier": "Silver",
+    "tiers": {
+        "Bronze": {
+            "Top": {"kda": 2.0, "csPerMin": 5.2, "kp": 45, "deaths": 6.2},
+            "Jungle": {"kda": 2.1, "csPerMin": 4.2, "kp": 52, "deaths": 6.0},
+            "Mid": {"kda": 2.1, "csPerMin": 5.4, "kp": 50, "deaths": 6.2},
+            "Bot": {"kda": 2.2, "csPerMin": 5.6, "kp": 50, "deaths": 6.0},
+            "Support": {"kda": 2.2, "csPerMin": 0.9, "kp": 55, "deaths": 6.5},
+        },
+        "Silver": {
+            "Top": {"kda": 2.2, "csPerMin": 5.6, "kp": 47, "deaths": 5.9},
+            "Jungle": {"kda": 2.3, "csPerMin": 4.6, "kp": 55, "deaths": 5.7},
+            "Mid": {"kda": 2.3, "csPerMin": 5.9, "kp": 52, "deaths": 5.9},
+            "Bot": {"kda": 2.4, "csPerMin": 6.1, "kp": 52, "deaths": 5.7},
+            "Support": {"kda": 2.4, "csPerMin": 1.0, "kp": 58, "deaths": 6.2},
+        },
+        "Gold": {
+            "Top": {"kda": 2.4, "csPerMin": 6.0, "kp": 49, "deaths": 5.6},
+            "Jungle": {"kda": 2.5, "csPerMin": 5.0, "kp": 57, "deaths": 5.4},
+            "Mid": {"kda": 2.5, "csPerMin": 6.3, "kp": 54, "deaths": 5.6},
+            "Bot": {"kda": 2.6, "csPerMin": 6.6, "kp": 54, "deaths": 5.4},
+            "Support": {"kda": 2.6, "csPerMin": 1.2, "kp": 60, "deaths": 5.9},
+        },
     },
 }
 
@@ -316,26 +333,28 @@ function radarRange(vals){
 function destroyCharts(ids){ ids.forEach(id=>{ const c=Chart.getChart(id); if(c) c.destroy(); }); }
 
 // ===== ベンチマーク（ブロンズ〜シルバー）＋ 改善提案 =====
-const BENCH = DATA.benchmarks || {roles:{}};
-const BENCH_TIER = BENCH.tier || 'Bronze〜Silver';
+const BENCH = DATA.benchmarks || {};
+const BENCH_METRICS = BENCH.metrics || ['kda','csPerMin','kp','deaths'];
+const BENCH_TIERS = Object.keys(BENCH.tiers||{});                 // 例: ['Bronze','Silver','Gold']
+const TARGET_TIER = BENCH.targetTier || (BENCH_TIERS.indexOf('Silver')>=0?'Silver':BENCH_TIERS[0]) || 'Silver';
+// ランク帯×ロール×指標のベンチ値
+function benchVal(tier,role,key){ const t=BENCH.tiers&&BENCH.tiers[tier]; const r=t&&t[role]; return (r&&r[key]!=null)?r[key]:null; }
 const BENCH_TIPS = {
   csPerMin:'ミニオンのラストヒットを徹底。死なずにレーンに留まりCSを伸ばそう。',
-  csAt10:'序盤10分のファームを最優先。無理なロームより安定したCS取得を。',
-  deaths:'不要なデスを減らす。引き際を早め、視界の無い場所へ踏み込まない。',
-  death10:'序盤のデスを減らす。レーンで無理せず、ガンク察知の視界を確保。',
   kda:'デスを抑えつつ関与を増やす。生存して終盤の戦力になる意識を。',
+  kp:'マップを見て味方の戦闘へ参加。ロームやオブジェ集合を早めに。',
+  deaths:'不要なデスを減らす。引き際を早め、視界の無い場所へ踏み込まない。',
+  csAt10:'序盤10分のファームを最優先。無理なロームより安定したCS取得を。',
+  death10:'序盤のデスを減らす。レーンで無理せず、ガンク察知の視界を確保。',
   goldDiffAt10:'対面とのCS・ゴールド差を意識。トレードと帰還タイミングを改善。',
-  killParticipation:'マップを見て味方の戦闘へ参加。ロームやオブジェ集合を早めに。',
   dmgShare:'集団戦の与ダメージを増やす。安全な位置から継続的にダメージを。',
   visionPerMin:'ワード設置・破壊を増やして視界スコアを上げよう。',
   wardsPlaced:'トリンケット/コントロールを切らさず設置する習慣を。',
-  controlWards:'帰還のたびにコントロールワードを買って設置しよう。',
 };
-function benchFor(role){ return (BENCH.roles&&BENCH.roles[role])||{}; }
-// 改善提案: ベンチ未達の指標を、未達度が大きい順に返す
+// 改善提案: 目標ランク帯(既定Silver)に未達の指標を、未達度が大きい順に返す
 function suggestions(p, role){
-  const tgts=benchFor(role||p.role); const out=[];
-  Object.keys(tgts).forEach(k=>{ if(!M[k])return; const t=tgts[k], v=aggVal(p,k,role); if(v==null)return;
+  const out=[];
+  BENCH_METRICS.forEach(k=>{ if(!M[k])return; const t=benchVal(TARGET_TIER, role, k), v=aggVal(p,k,role); if(v==null||t==null)return;
     const short = M[k].hi ? (t-v)/(Math.abs(t)||1) : (v-t)/(Math.abs(t)||1);
     if(short>0.02) out.push({k,v,t,short,tip:BENCH_TIPS[k]||''}); });
   out.sort((a,b)=>b.short-a.short); return out;
@@ -526,9 +545,10 @@ function renderDetail(){
      <label>ロール:</label><select id="p3Role"></select></div>
      <div id="p3Profile"></div></section>
    <div class="grid2">
-     <section><h2>次に改善したいポイント（${BENCH_TIER}基準）</h2><div id="p3Suggest"></div></section>
-     <section><h2>コーチとの比較（実数値）</h2><div class="scroll"><table id="p3CoachCmp"></table></div>
-       <div class="note">各コーチの実数値をベンチマークとして比較（コーチは平均せず個別表示）。緑=選手がコーチ以上 / 赤=コーチ未満。コーチ値はそのロールの戦績、無ければ通算。</div></section>
+     <section><h2>次に改善したいポイント（${TARGET_TIER}基準）</h2><div id="p3Suggest"></div></section>
+     <section><h2>ランク・コーチ比較（主要指標）</h2><div class="scroll"><table id="p3CoachCmp"></table></div>
+       <div class="note">選手の主要指標を、ランク帯（Bronze/Silver/Gold）と各コーチの実数値で横並び比較。★=目標ランク(${TARGET_TIER})。
+       選手セルは目標ランク以上なら緑・未満なら赤。ランク値は公開統計の目安（近似・<code>benchmarks.json</code>で編集可）。コーチ値はそのロールの戦績、無ければ通算。</div></section>
    </div>
    <section><h2>成長トラッキング ★最重要</h2>
      <div class="controls"><label>指標:</label><select id="p3Growth"></select>
@@ -571,14 +591,16 @@ function drawSuggest(){
 }
 function drawCoachCmp(){
   const p=curP(); const role=P3.role;
-  const keys=['winrate','kda','csPerMin','csAt10','deaths','death10','goldDiffAt10','kp','dmgShare','dmgDealt','dmgTaken','visionPerMin','wardsPlaced'];
-  // コーチは平均でなく1人ずつ列に並べる（コーチ名＋主ロール）
-  let h='<tr><th>指標</th><th>'+p.nickname+'</th>'+COACHES.map(c=>`<th>${c.nickname}<span class="wl"> (${coachRoleLabel(c)})</span></th>`).join('')+'</tr>';
-  keys.forEach(k=>{ if(!M[k])return; const v=aggVal(p,k,role);
-    h+=`<tr><td>${M[k].l}</td><td>${fmt(v,M[k].d)}</td>`+COACHES.map(c=>{ const cv=coachVal(c,k,role);
-      const better=(v==null||cv==null)?null:(M[k].hi? v>=cv : v<=cv);  // 選手がコーチ以上か
-      const col=better==null?'':(better?'var(--good)':'var(--bad)');
-      return `<td style="color:${col}">${fmt(cv,M[k].d)}</td>`; }).join('')+'</tr>'; });
+  // 主要指標を、選手 / ランク帯(Bronze・Silver・Gold) / 各コーチ で横並び比較
+  let h='<tr><th>指標</th><th>'+p.nickname+'</th>'+
+    BENCH_TIERS.map(t=>`<th>${t}${t===TARGET_TIER?' ★':''}</th>`).join('')+
+    COACHES.map(c=>`<th>${c.nickname}<span class="wl"> (${coachRoleLabel(c)})</span></th>`).join('')+'</tr>';
+  BENCH_METRICS.forEach(k=>{ if(!M[k])return; const v=aggVal(p,k,role); const tgt=benchVal(TARGET_TIER,role,k);
+    const better=(v==null||tgt==null)?null:(M[k].hi? v>=tgt : v<=tgt);   // 選手が目標ランク以上か
+    const pcol=better==null?'':(better?'var(--good)':'var(--bad)');
+    h+=`<tr><td>${M[k].l}</td><td style="color:${pcol};font-weight:600">${fmt(v,M[k].d)}</td>`+
+      BENCH_TIERS.map(t=>`<td class="wl">${fmt(benchVal(t,role,k),M[k].d)}</td>`).join('')+
+      COACHES.map(c=>`<td class="wl">${fmt(coachVal(c,k,role),M[k].d)}</td>`).join('')+'</tr>'; });
   document.getElementById('p3CoachCmp').innerHTML=h;
 }
 function drawProfile(){

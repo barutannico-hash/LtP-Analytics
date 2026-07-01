@@ -1,11 +1,29 @@
 {
-  "tier": "Bronze〜Silver",
-  "_note": "ブロンズ〜シルバー帯のおおよその目安。改善提案の基準値です。自由に編集できます。deaths/death10 は少ないほど良い指標です。",
-  "roles": {
-    "Top":     {"csPerMin": 6.0, "csAt10": 60, "deaths": 6.0, "death10": 1.0, "kda": 2.0, "goldDiffAt10": 0, "killParticipation": 45, "dmgShare": 24, "visionPerMin": 0.5, "wardsPlaced": 8, "controlWards": 2},
-    "Jungle":  {"csPerMin": 4.5, "csAt10": 50, "deaths": 6.0, "death10": 1.0, "kda": 2.2, "goldDiffAt10": 0, "killParticipation": 55, "dmgShare": 20, "visionPerMin": 0.7, "wardsPlaced": 9, "controlWards": 3},
-    "Mid":     {"csPerMin": 6.2, "csAt10": 62, "deaths": 6.0, "death10": 1.0, "kda": 2.3, "goldDiffAt10": 0, "killParticipation": 50, "dmgShare": 26, "visionPerMin": 0.6, "wardsPlaced": 8, "controlWards": 2},
-    "Bot":     {"csPerMin": 6.5, "csAt10": 62, "deaths": 5.5, "death10": 0.8, "kda": 2.4, "goldDiffAt10": 0, "killParticipation": 50, "dmgShare": 26, "visionPerMin": 0.5, "wardsPlaced": 8, "controlWards": 2},
-    "Support": {"csPerMin": 1.0, "csAt10": 12, "deaths": 6.5, "death10": 1.0, "kda": 2.2, "goldDiffAt10": 0, "killParticipation": 55, "dmgShare": 12, "visionPerMin": 1.3, "wardsPlaced": 18, "controlWards": 4}
+  "_note": "公開のランク別統計（op.gg / League of Graphs 等）の一般的な水準に合わせた近似値です。ランク別ゲーム内スタッツは各サイトがJS描画のため厳密な自動取得ができず、公開レンジに基づく目安として設定しています。実測に合わせて自由に調整してください。deaths は少ないほど良い指標です。",
+  "source": "approx. public rank stats (op.gg / League of Graphs)",
+  "metrics": ["kda", "csPerMin", "kp", "deaths"],
+  "targetTier": "Silver",
+  "tiers": {
+    "Bronze": {
+      "Top":     {"kda": 2.0, "csPerMin": 5.2, "kp": 45, "deaths": 6.2},
+      "Jungle":  {"kda": 2.1, "csPerMin": 4.2, "kp": 52, "deaths": 6.0},
+      "Mid":     {"kda": 2.1, "csPerMin": 5.4, "kp": 50, "deaths": 6.2},
+      "Bot":     {"kda": 2.2, "csPerMin": 5.6, "kp": 50, "deaths": 6.0},
+      "Support": {"kda": 2.2, "csPerMin": 0.9, "kp": 55, "deaths": 6.5}
+    },
+    "Silver": {
+      "Top":     {"kda": 2.2, "csPerMin": 5.6, "kp": 47, "deaths": 5.9},
+      "Jungle":  {"kda": 2.3, "csPerMin": 4.6, "kp": 55, "deaths": 5.7},
+      "Mid":     {"kda": 2.3, "csPerMin": 5.9, "kp": 52, "deaths": 5.9},
+      "Bot":     {"kda": 2.4, "csPerMin": 6.1, "kp": 52, "deaths": 5.7},
+      "Support": {"kda": 2.4, "csPerMin": 1.0, "kp": 58, "deaths": 6.2}
+    },
+    "Gold": {
+      "Top":     {"kda": 2.4, "csPerMin": 6.0, "kp": 49, "deaths": 5.6},
+      "Jungle":  {"kda": 2.5, "csPerMin": 5.0, "kp": 57, "deaths": 5.4},
+      "Mid":     {"kda": 2.5, "csPerMin": 6.3, "kp": 54, "deaths": 5.6},
+      "Bot":     {"kda": 2.6, "csPerMin": 6.6, "kp": 54, "deaths": 5.4},
+      "Support": {"kda": 2.6, "csPerMin": 1.2, "kp": 60, "deaths": 5.9}
+    }
   }
 }
