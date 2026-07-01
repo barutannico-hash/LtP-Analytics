@@ -320,8 +320,6 @@ function roleAvg(role,key,team){ const vs=rolePlayers(role,team).map(p=>aggVal(p
 function coachAvg(key,role){ const cs=role?COACHES.filter(p=>p.byRole&&p.byRole[role]):COACHES; const vs=cs.map(p=>aggVal(p,key,role)).filter(v=>v!=null); return vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:null; }
 // 個々のコーチ値: そのロールを担当していればロール別、無ければ通算
 function coachVal(c,key,role){ if(role && c.byRole && c.byRole[role]) return c.byRole[role].agg[key]; return c.agg?c.agg[key]:null; }
-// コーチの主ロール表示用
-function coachRoleLabel(c){ return c.primaryRole || c.role || ''; }
 // ロール内順位 "x位/N人"
 function roleRank(p,key,role){
   const m=M[key]; const peers=rolePlayers(role).map(x=>({n:x.nickname,v:aggVal(x,key,role)})).filter(x=>x.v!=null);
@@ -920,9 +918,11 @@ function drawCoachCmp(){
   // 指標セットはそのロールの重要指標を優先し、ベンチ値が無いものはBENCH_METRICSで補う。
   const keys = [...new Set([...roleMetrics(role, {forBench:true}), ...BENCH_METRICS])];
   const priority = new Set(roleMetrics(role, {forBench:true}));
+  // コーチの見出しは、今表示しているロール(role)に合わせる。
+  // そのロールの戦績が無いコーチは「/通算」を付けて分かるようにする（メインレーン表記のままだと紛らわしいため）。
   let h='<tr><th>指標</th><th>'+p.nickname+'</th>'+
     BENCH_TIERS.map(t=>`<th>${t}${t===TARGET_TIER?' ★':''}</th>`).join('')+
-    COACHES.map(c=>`<th>${c.nickname}<span class="wl"> (${coachRoleLabel(c)})</span></th>`).join('')+'</tr>';
+    COACHES.map(c=>{ const onRole = c.byRole && c.byRole[role]; return `<th>${c.nickname}<span class="wl"> (${role}${onRole?'':'/通算'})</span></th>`; }).join('')+'</tr>';
   keys.forEach(k=>{ if(!M[k])return; const v=aggVal(p,k,role); const tgt=benchVal(TARGET_TIER,role,k);
     const better=(v==null||tgt==null)?null:(M[k].hi? v>=tgt : v<=tgt);   // 選手が目標ランク以上か
     const pcol=better==null?'':(better?'var(--good)':'var(--bad)');
@@ -1057,9 +1057,10 @@ function drawP4CoachTable(){
   const keys=['winrate','kda','csPerMin','csAt10','deaths','kp','dmgShare','dmgDealt','dmgTaken','visionPerMin','wardsPlaced'];
   let h='<tr><th>選手</th>'+keys.map(k=>`<th>${M[k].l}</th>`).join('')+'</tr>';
   ps.forEach(p=>{ h+=`<tr><td>${p.nickname}</td>`+keys.map(k=>`<td>${fmt(aggVal(p,k,role),M[k].d)}</td>`).join('')+'</tr>'; });
-  // コーチは平均でなく1人ずつ行で表示（そのロールの戦績、無ければ通算）
+  // コーチは平均でなく1人ずつ行で表示（そのロールの戦績、無ければ通算）。
+  // 見出しは今表示しているロール(role)に合わせる（メインレーン表記のままだと紛らわしいため）。
   COACHES.forEach(c=>{ const onRole = c.byRole && c.byRole[role];
-    h+=`<tr class="coach-row"><td>${c.nickname}<span class="wl"> (C・${coachRoleLabel(c)}${onRole?'':'/通算'})</span></td>`+
+    h+=`<tr class="coach-row"><td>${c.nickname}<span class="wl"> (C・${role}${onRole?'':'/通算'})</span></td>`+
       keys.map(k=>`<td>${fmt(coachVal(c,k,role),M[k].d)}</td>`).join('')+'</tr>'; });
   document.getElementById('p4CoachTable').innerHTML=h;
 }
@@ -1277,3 +1278,4 @@ if __name__ == "__main__":
     import common
     import analyze
     analyze.main()
+    cfg = common.load_config()
