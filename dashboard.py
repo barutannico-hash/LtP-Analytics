@@ -13,7 +13,7 @@ import metrics
 
 # 各試合レコードからUIに必要なフィールドだけ抜き出す（埋め込みサイズ削減）
 MATCH_FIELDS = [
-    "gameIndex", "gameCreation", "champion", "championId", "playedRole",
+    "matchId", "gameIndex", "gameCreation", "champion", "championId", "playedRole",
     "opponentChampion", "opponentChampionId", "win",
     "kills", "deaths", "assists", "kda", "totalCs", "csPerMin",
     "csAt10", "goldDiffAt10", "levelDiffAt10", "death10",
@@ -278,10 +278,10 @@ function champCell(name,id){ return id ? `<img class="cicon" src="${champIcon(id
 function aggVal(p,k,role){ const a=(role && p.byRole && p.byRole[role])?p.byRole[role].agg:p.agg; return a?a[k]:null; }
 function playerGames(p,role){ return (role && p.byRole && p.byRole[role])?p.byRole[role].games:(p.agg?p.agg.games:0); }
 function playerPool(p,role){ return (role && p.byRole && p.byRole[role])?p.byRole[role].champ_pool:(p.champ_pool||[]); }
-// そのロールを実際に担当した選手
-function rolePlayers(role){ return PLAYERS.filter(p=>p.byRole && p.byRole[role] && p.byRole[role].games>0); }
-// ロール平均（そのロールを担当した選手の、当該ロール集計の平均）
-function roleAvg(role,key){ const vs=rolePlayers(role).map(p=>aggVal(p,key,role)).filter(v=>v!=null); return vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:null; }
+// そのロールを実際に担当した選手（team指定でさらに絞り込み可能）
+function rolePlayers(role, team){ return PLAYERS.filter(p=>p.byRole && p.byRole[role] && p.byRole[role].games>0 && (!team || p.team===team)); }
+// ロール平均（そのロールを担当した選手の、当該ロール集計の平均。team指定でチーム内平均に）
+function roleAvg(role,key,team){ const vs=rolePlayers(role,team).map(p=>aggVal(p,key,role)).filter(v=>v!=null); return vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:null; }
 // コーチ平均（role指定時はそのロールを担当したコーチ）※平均は使わず個別表示に移行
 function coachAvg(key,role){ const cs=role?COACHES.filter(p=>p.byRole&&p.byRole[role]):COACHES; const vs=cs.map(p=>aggVal(p,key,role)).filter(v=>v!=null); return vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:null; }
 // 個々のコーチ値: そのロールを担当していればロール別、無ければ通算
@@ -370,6 +370,10 @@ function groupByDate(matches){
   return map;
 }
 function sortedDates(map){ return Object.keys(map).sort(); }
+// 直近n個の「試合があった日」を返す（暦日ベース、実際に練習/大会があった日のみをカウント）
+function recentActiveDates(matches, n){ return sortedDates(groupByDate(matches)).slice(-n); }
+// 選手pがdates(日付文字列の配列)のいずれかに試合をしていればtrue
+function playedInDates(p, dates){ return p.matches.some(m=>dates.includes(toJstDate(m.gameCreation))); }
 
 // agg指標キー -> 試合明細(matches[])側のフィールド名（名前が異なるものだけ対応表を持つ）
 const MATCH_FIELD_MAP = { kp:'killParticipation', dmgDealt:'dmgToChamp' };
@@ -459,42 +463,106 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 // =====================================================================
 //  ページ1：大会全体の概要
 // =====================================================================
+let OVSUM={role:'すべて',team:''};
+let OVGOOD={role:'すべて',team:''};
+let OVCHAMP={role:'全体',team:''};
+let OVROLE={team:''};
+function ovTeamSelect(id, state, onChange){
+  const el=document.getElementById(id);
+  el.innerHTML='<option value="">全チーム</option>'+TEAMS.map(t=>`<option value="${t}" ${t===state.team?'selected':''}>${t}</option>`).join('');
+  el.onchange=()=>{ state.team=el.value; onChange(); };
+}
+function ovRoleTabs(id, state, onChange, includeAll){
+  const el=document.getElementById(id); el.innerHTML='';
+  const opts = includeAll ? ['すべて',...ROLES] : ROLES;
+  opts.forEach(r=>{ const b=document.createElement('button'); b.textContent=r; if(r===state.role)b.classList.add('active');
+    b.onclick=()=>{ state.role=r; el.querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); onChange(); }; el.appendChild(b); });
+}
 function renderOverview(){
   const el=document.getElementById('page-overview');
-  const games = PLAYERS.reduce((s,p)=>s+p.agg.games,0);
-  const allMatches = PLAYERS.flatMap(p=>p.matches);
-  const champs = new Set(allMatches.map(m=>m.champion));
-  const wins = PLAYERS.reduce((s,p)=>s+p.agg.wins,0);
-  const avg = key => { const vs=PLAYERS.map(p=>aggVal(p,key)).filter(v=>v!=null); return vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:0; };
   el.innerHTML = `
-   <section><h2>サマリー</h2><div class="cards">
-     <div class="stat"><div class="l">総選手数</div><div class="n">${PLAYERS.length}</div></div>
-     <div class="stat"><div class="l">総試合数(ユニーク)</div><div class="n">${DATA.totals.unique_games}</div><div class="sub">のべ出場 ${games}</div></div>
-     <div class="stat"><div class="l">使用チャンプ種</div><div class="n">${DATA.totals.n_champs}</div></div>
-     <div class="stat"><div class="l">全体平均勝率</div><div class="n">${fmt(games?wins/games*100:0,1)}%</div></div>
-     <div class="stat"><div class="l">全体平均KDA</div><div class="n">${fmt(avg('kda'),2)}</div></div>
-     <div class="stat"><div class="l">全体平均CS/min</div><div class="n">${fmt(avg('csPerMin'),1)}</div></div>
-   </div></section>
-   <section><h2>日別ハイライト</h2>
+   <section><h2>サマリー</h2>
+     <div class="controls"><label>ロール:</label><div class="tabs" id="ovSumRole"></div>
+       <label>チーム:</label><select id="ovSumTeam"></select></div>
+     <div class="cards" id="ovSumCards"></div></section>
+   <section><h2>日別ハイライト（チーム別）</h2>
      <div id="ovDailyHighlight" style="margin-bottom:10px;font-size:13px"></div>
      <div class="chart-box"><canvas id="ovDailyChart"></canvas></div>
-     <div class="note">練習・大会があった日ごとの全体勝率(緑・左軸)と平均KDA(青・右軸)、試合数(灰棒)。大会が進むにつれて全体がどう伸びているかの目安に。</div></section>
-   <section><h2>今、伸びている選手</h2><div id="ovGoodPlay"></div>
-     <div class="note">直近10試合とそれ以前を比較し、最も伸び幅が大きかった選手・指標をピックアップ。コーチが褒めるきっかけに使ってください。</div></section>
-   <section><h2>チーム別サマリー</h2><div class="scroll"><table id="ovTeam"></table></div>
+     <div class="note">練習・大会があった日ごとに、TeamA(赤)/TeamB(青)/TeamC(緑)それぞれの勝率を算出。大会が進むにつれて各チームがどう伸びているかの比較に。</div></section>
+   <section><h2>今、伸びている選手</h2>
+     <div class="controls"><label>ロール:</label><div class="tabs" id="ovGoodRole"></div>
+       <label>チーム:</label><select id="ovGoodTeam"></select></div>
+     <div id="ovGoodPlay"></div>
+     <div class="note">直近2日間の練習日にプレイした選手の中から、直近10試合とそれ以前を比較して最も伸び幅が大きかった選手・指標をピックアップ。コーチが褒めるきっかけに使ってください。</div></section>
+   <section><h2>チーム別サマリー</h2>
+     <div class="controls"><label>ロール:</label><div class="tabs" id="ovTeamRole"></div></div>
+     <div class="scroll"><table id="ovTeam"></table></div>
      <div class="note">行クリックで「選手一覧」をそのチームで絞り込み表示します。</div></section>
    <section><h2>全体 チャンピオン使用回数 ＆ 勝率</h2>
-     <div class="controls"><label>ロール:</label><div class="tabs" id="ovChampRole"></div></div>
+     <div class="controls"><label>ロール:</label><div class="tabs" id="ovChampRole"></div>
+       <label>チーム:</label><select id="ovChampTeam"></select></div>
      <div class="chart-box"><canvas id="ovChampChart"></canvas></div></section>
    <section><h2>ロール別 平均指標比較</h2>
+     <div class="controls"><label>チーム:</label><select id="ovRoleTeam"></select></div>
      <div class="chart-box"><canvas id="ovRoleChart"></canvas></div>
      <div class="note">どのロールが全体的に課題を抱えているかの把握に。</div></section>`;
 
-  // チーム別テーブル
+  ovRoleTabs('ovSumRole', OVSUM, drawOvSummary, true);
+  ovTeamSelect('ovSumTeam', OVSUM, drawOvSummary);
+  drawOvSummary();
+
+  ovRoleTabs('ovGoodRole', OVGOOD, drawOvGoodPlay, true);
+  ovTeamSelect('ovGoodTeam', OVGOOD, drawOvGoodPlay);
+  drawOvGoodPlay();
+
+  let OVTEAMTABLE={role:'すべて'};
+  ovRoleTabs('ovTeamRole', OVTEAMTABLE, ()=>drawOvTeamTable(OVTEAMTABLE), true);
+  drawOvTeamTable(OVTEAMTABLE);
+
+  ovRoleTabs('ovChampRole', OVCHAMP, drawOvChamp, true);
+  // ovChampのロール状態は「全体」表記に合わせる（初期値）
+  OVCHAMP.role='全体';
+  document.querySelectorAll('#ovChampRole button').forEach(b=>b.classList.toggle('active', b.textContent==='全体'));
+  ovTeamSelect('ovChampTeam', OVCHAMP, drawOvChamp);
+  drawOvChamp();
+
+  ovTeamSelect('ovRoleTeam', OVROLE, drawOvRole);
+  drawOvRole();
+
+  drawOvDaily();
+}
+function ovFilteredPlayers(role, team){
+  let list = PLAYERS;
+  if(team) list = list.filter(p=>p.team===team);
+  if(role && role!=='すべて') list = list.filter(p=>p.byRole && p.byRole[role] && p.byRole[role].games>0);
+  return list;
+}
+function drawOvSummary(){
+  const role = OVSUM.role==='すべて' ? null : OVSUM.role;
+  const list = ovFilteredPlayers(OVSUM.role, OVSUM.team);
+  const games = list.reduce((s,p)=>s+playerGames(p,role),0);
+  let wins=0; const uniqueIds=new Set(); const champSet=new Set();
+  list.forEach(p=>{
+    const ms = role ? p.matches.filter(m=>m.playedRole===role) : p.matches;
+    ms.forEach(m=>{ if(m.win) wins++; if(m.matchId) uniqueIds.add(m.matchId); if(m.champion) champSet.add(m.champion); });
+  });
+  const avg = key => { const vs=list.map(p=>aggVal(p,key,role)).filter(v=>v!=null); return vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:0; };
+  const box=document.getElementById('ovSumCards');
+  box.innerHTML = `
+     <div class="stat"><div class="l">対象選手数</div><div class="n">${list.length}</div></div>
+     <div class="stat"><div class="l">試合数(ユニーク)</div><div class="n">${uniqueIds.size}</div><div class="sub">のべ出場 ${games}</div></div>
+     <div class="stat"><div class="l">使用チャンプ種</div><div class="n">${champSet.size}</div></div>
+     <div class="stat"><div class="l">平均勝率</div><div class="n">${fmt(games?wins/games*100:0,1)}%</div></div>
+     <div class="stat"><div class="l">平均KDA</div><div class="n">${fmt(avg('kda'),2)}</div></div>
+     <div class="stat"><div class="l">平均CS/min</div><div class="n">${fmt(avg('csPerMin'),1)}</div></div>`;
+}
+function drawOvTeamTable(state){
+  const role = state.role==='すべて' ? null : state.role;
   const tbody = TEAMS.map(t=>{
-    const ps=PLAYERS.filter(p=>p.team===t);
-    const g=ps.reduce((s,p)=>s+p.agg.games,0), w=ps.reduce((s,p)=>s+p.agg.wins,0);
-    const m=key=>{const vs=ps.map(p=>aggVal(p,key)).filter(v=>v!=null);return vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:null;};
+    const ps=role ? PLAYERS.filter(p=>p.team===t && p.byRole && p.byRole[role] && p.byRole[role].games>0) : PLAYERS.filter(p=>p.team===t);
+    const g=ps.reduce((s,p)=>s+playerGames(p,role),0);
+    const w=ps.reduce((s,p)=>{ const ms=role?p.matches.filter(m=>m.playedRole===role):p.matches; return s+ms.filter(m=>m.win).length; },0);
+    const m=key=>{const vs=ps.map(p=>aggVal(p,key,role)).filter(v=>v!=null);return vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:null;};
     const wr=g?w/g*100:0;
     const wc = wr>=52?'var(--good)':(wr<48?'var(--bad)':'var(--text)');
     return {t,g,w,wr,wc,kda:m('kda'),cs:m('csPerMin'),gpm:m('goldPerMin')};
@@ -505,32 +573,29 @@ function renderOverview(){
     `<td>${fmt(r.kda,2)}</td><td>${fmt(r.cs,1)}</td><td>${fmt(r.gpm,1)}</td></tr>`; });
   const tt=document.getElementById('ovTeam'); tt.innerHTML=h;
   tt.querySelectorAll('tr[data-team]').forEach(tr=>tr.onclick=()=>{ goPlayers(tr.dataset.team); });
-
-  // チャンピオン複合（ロールフィルタ）
-  const roleTabs=document.getElementById('ovChampRole');
-  ['全体',...ROLES].forEach((r,i)=>{ const b=document.createElement('button'); b.textContent=r; if(i===0)b.classList.add('active'); b.onclick=()=>{ roleTabs.querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); drawOvChamp(r); }; roleTabs.appendChild(b); });
-  drawOvChamp('全体');
-
-  // ロール別平均
-  drawOvRole();
-  // 日別ハイライト
-  drawOvDaily();
-  drawOvGoodPlay();
 }
 function drawOvGoodPlay(){
   const box=document.getElementById('ovGoodPlay');
+  const allMatches = PLAYERS.flatMap(p=>p.matches);
+  const recentDates = recentActiveDates(allMatches, 2);
+  if(!recentDates.length){ box.innerHTML='<div class="note">日別データがありません。</div>'; return; }
+  let pool = PLAYERS.filter(p=>playedInDates(p, recentDates));
+  if(OVGOOD.team) pool = pool.filter(p=>p.team===OVGOOD.team);
   const picks=[];
-  PLAYERS.forEach(p=>{
-    (p.rolesPlayed&&p.rolesPlayed.length?p.rolesPlayed:[p.primaryRole]).forEach(role=>{
+  pool.forEach(p=>{
+    let roles = (p.rolesPlayed&&p.rolesPlayed.length?p.rolesPlayed:[p.primaryRole]);
+    if(OVGOOD.role!=='すべて') roles = roles.filter(r=>r===OVGOOD.role);
+    roles.forEach(role=>{
       const res=improvements(p, role, 10);
       if(res.list.length) picks.push({p, role, top:res.list[0]});
     });
   });
-  if(!picks.length){ box.innerHTML='<div class="note">比較に十分な試合数がまだありません。</div>'; return; }
+  const periodNote = `<div class="note" style="margin-bottom:8px">対象期間: ${recentDates.join(' , ')}（直近2日間の練習日にプレイした選手）</div>`;
+  if(!picks.length){ box.innerHTML=periodNote+'<div class="note">条件に合う選手の中で、比較に十分な試合数がある人がまだいません。</div>'; return; }
   picks.sort((a,b)=>b.top.relImprove-a.top.relImprove);
-  let h='<div class="cards">';
+  let h=periodNote+'<div class="cards">';
   picks.slice(0,3).forEach(({p,role,top})=>{
-    h+=`<div class="stat" style="border-left:3px solid var(--good)"><div class="l">${p.nickname} <span class="wl">(${role})</span></div>`+
+    h+=`<div class="stat" style="border-left:3px solid var(--good)"><div class="l">${p.nickname} <span class="wl">(${p.team} / ${role})</span></div>`+
       `<div class="n" style="font-size:16px">${M[top.k].l} <span class="pos">${top.diff>=0?'+':''}${fmt(top.diff,M[top.k].d)}</span></div>`+
       `<div class="sub">${fmt(top.earlier,M[top.k].d)} → ${fmt(top.recent,M[top.k].d)}</div></div>`;
   });
@@ -539,38 +604,45 @@ function drawOvGoodPlay(){
 }
 function drawOvDaily(){
   destroyCharts(['ovDailyChart']);
-  const allMatches = PLAYERS.flatMap(p=>p.matches);
-  const byDate = groupByDate(allMatches);
-  const dates = sortedDates(byDate);
-  const box = document.getElementById('ovDailyHighlight');
-  if(dates.length===0){ box.innerHTML='<div class="note">日別データがありません。</div>'; return; }
-  const wr = dates.map(d=>{ const ms=byDate[d]; return ms.filter(m=>m.win).length/ms.length*100; });
-  const kda = dates.map(d=>periodAvg(byDate[d],'kda'));
-  const games = dates.map(d=>byDate[d].length);
-  new Chart('ovDailyChart',{data:{labels:dates,datasets:[
-    {type:'bar',label:'試合数',data:games,backgroundColor:'rgba(139,149,165,0.35)',yAxisID:'y2',order:3},
-    {type:'line',label:'勝率%',data:wr,borderColor:'#3fb950',backgroundColor:'#3fb950',yAxisID:'y',tension:0.3,pointRadius:4,order:1},
-    {type:'line',label:'平均KDA',data:kda,borderColor:'#5b8def',backgroundColor:'#5b8def',yAxisID:'y1',tension:0.3,pointRadius:4,order:2},
-  ]},options:{responsive:true,maintainAspectRatio:false,
-    scales:{
-      y:{position:'left',beginAtZero:true,max:100,title:{display:true,text:'勝率%'}},
-      y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false},title:{display:true,text:'KDA'}},
-      y2:{display:false,beginAtZero:true},
-    }}});
-  // 直近の練習日ハイライト（前回比）
-  const last=dates[dates.length-1]; const lastWr=wr[wr.length-1];
-  let msg=`直近の練習日: <b>${last}</b>（${byDate[last].length}試合 / 勝率 ${fmt(lastWr,1)}%）`;
-  if(dates.length>=2){
-    const prevWr=wr[wr.length-2];
-    const d=lastWr-prevWr;
-    msg+=` <span class="${d>=0?'pos':'neg'}">${d>=0?'▲':'▼'} 前回(${dates[dates.length-2]})比 ${d>=0?'+':''}${fmt(d,1)}pt</span>`;
-  }
+  const perTeam={};
+  TEAMS.forEach(t=>{ perTeam[t]=groupByDate(PLAYERS.filter(p=>p.team===t).flatMap(p=>p.matches)); });
+  const allDatesSet=new Set();
+  TEAMS.forEach(t=>Object.keys(perTeam[t]).forEach(d=>allDatesSet.add(d)));
+  const dates=[...allDatesSet].sort();
+  const box=document.getElementById('ovDailyHighlight');
+  if(!dates.length){ box.innerHTML='<div class="note">日別データがありません。</div>'; return; }
+  const datasets = TEAMS.map(t=>{
+    const byDate=perTeam[t];
+    const data = dates.map(d=> byDate[d] ? (byDate[d].filter(m=>m.win).length/byDate[d].length*100) : null);
+    return {label:t+' 勝率%',data,borderColor:teamColor(t),backgroundColor:teamColor(t),tension:0.3,pointRadius:4,spanGaps:false};
+  });
+  new Chart('ovDailyChart',{type:'line',data:{labels:dates,datasets},options:{responsive:true,maintainAspectRatio:false,
+    scales:{y:{beginAtZero:true,max:100,title:{display:true,text:'勝率%'}}},
+    plugins:{tooltip:{callbacks:{afterLabel:(c)=>{ const t=TEAMS[c.datasetIndex]; const d=dates[c.dataIndex]; const ms=perTeam[t][d]; return ms?`${ms.length}試合`:'試合なし'; }}}}}});
+  // チームごとの直近練習日ハイライト（前回比）
+  let msg='';
+  TEAMS.forEach(t=>{
+    const byDate=perTeam[t]; const ds=sortedDates(byDate);
+    if(!ds.length){ msg+=`<div><span style="color:${teamColor(t)};font-weight:600">●${t}</span> データなし</div>`; return; }
+    const last=ds[ds.length-1];
+    const lastWr=byDate[last].filter(m=>m.win).length/byDate[last].length*100;
+    let line=`<span style="color:${teamColor(t)};font-weight:600">●${t}</span> 直近練習日 <b>${last}</b>（${byDate[last].length}試合 / 勝率 ${fmt(lastWr,1)}%）`;
+    if(ds.length>=2){
+      const prev=ds[ds.length-2];
+      const prevWr=byDate[prev].filter(m=>m.win).length/byDate[prev].length*100;
+      const d=lastWr-prevWr;
+      line+=` <span class="${d>=0?'pos':'neg'}">${d>=0?'▲':'▼'} 前回比 ${d>=0?'+':''}${fmt(d,1)}pt</span>`;
+    }
+    msg+=`<div style="margin-bottom:4px">${line}</div>`;
+  });
   box.innerHTML=msg;
 }
-function drawOvChamp(roleFilter){
+function drawOvChamp(){
   destroyCharts(['ovChampChart']);
+  const roleFilter = OVCHAMP.role, teamFilter = OVCHAMP.team;
   const pool={};
   PLAYERS.forEach(p=>{
+    if(teamFilter && p.team!==teamFilter) return;
     p.matches.forEach(m=>{ const c=m.champion; if(!c)return;
       if(roleFilter!=='全体' && m.playedRole!==roleFilter) return;
       pool[c]=pool[c]||{plays:0,wins:0,byTeam:{},players:{}};
@@ -581,7 +653,8 @@ function drawOvChamp(roleFilter){
     top:Object.entries(v.players).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>x[0]).join(', ')}));
   arr.sort((a,b)=>b.plays-a.plays); arr=arr.slice(0,20);
   // チーム別の積み上げ棒（どのチームがピックしているか）＋ 勝率の折れ線
-  const teamDs=TEAMS.map(t=>({type:'bar',label:t,stack:'champ',backgroundColor:teamColor(t),yAxisID:'y',
+  const teamsToShow = teamFilter ? [teamFilter] : TEAMS;
+  const teamDs=teamsToShow.map(t=>({type:'bar',label:t,stack:'champ',backgroundColor:teamColor(t),yAxisID:'y',
     data:arr.map(d=>d.byTeam[t]||0)}));
   const lineDs={type:'line',label:'勝率%',data:arr.map(d=>d.winrate),borderColor:'#e6e9ef',
     backgroundColor:'#e6e9ef',yAxisID:'y1',tension:0.3,pointRadius:3};
@@ -594,8 +667,9 @@ function drawOvChamp(roleFilter){
 }
 function drawOvRole(){
   destroyCharts(['ovRoleChart']);
+  const team = OVROLE.team || null;
   const keys=['csPerMin','kda','deaths','wardsPlaced'];
-  const ds=keys.map((k,i)=>({label:M[k].l,data:ROLES.map(r=>roleAvg(r,k)),
+  const ds=keys.map((k,i)=>({label:M[k].l,data:ROLES.map(r=>roleAvg(r,k,team)),
     backgroundColor:['#5b8def','#3fb950','#f0623f','#9b6dde'][i]}));
   new Chart('ovRoleChart',{type:'bar',data:{labels:ROLES,datasets:ds},
     options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}});
@@ -948,7 +1022,9 @@ function getProfMap(p, role){
   const map={};
   profPool(p, role).forEach(c=>{ if(c.champId) map[c.champId]={champ:c.champ,plays:c.plays,winrate:c.winrate,tier:autoTier(c)}; });
   let added=[]; try{ added=JSON.parse(lsGet('profadd:'+p.nickname)||'[]'); }catch(e){}
-  added.forEach(a=>{ if(!map[a.id]) map[a.id]={champ:a.name,plays:0,winrate:null,tier:'練習中'}; });
+  // 手動追加分は、実在するチャンピオンID(DATA.champMapに存在)のみ反映する。
+  // 過去の不具合や誤操作でブラウザのlocalStorageに紛れ込んだ無効なID（例: "Strawberry_xxx"）はここで除外される。
+  added.forEach(a=>{ if(!DATA.champMap || !DATA.champMap[a.id]) return; if(!map[a.id]) map[a.id]={champ:a.name,plays:0,winrate:null,tier:'練習中'}; });
   Object.keys(map).forEach(id=>{ const ov=lsGet(profKey(p.nickname,id)); if(ov && ov!=='除外') map[id].tier=ov; if(ov==='除外') delete map[id]; });
   return map;
 }
@@ -1040,7 +1116,7 @@ function renderGuide(){
 
   <section><h2>各ページの見方</h2>
     <table><tr><th>ページ</th><th style="text-align:left">内容</th></tr>
-    <tr><td class="clickable" data-goto="overview">① 大会全体の概要</td><td style="text-align:left">全選手・チームの総合サマリー。<b>日別ハイライト</b>と<b>今、伸びている選手</b>で全体の成長を確認できます。</td></tr>
+    <tr><td class="clickable" data-goto="overview">① 大会全体の概要</td><td style="text-align:left">全選手・チームの総合サマリー。<b>日別ハイライト</b>と<b>今、伸びている選手</b>で全体の成長を確認できます。ロール・チームで絞り込み可能。</td></tr>
     <tr><td class="clickable" data-goto="players">② 選手一覧＆比較</td><td style="text-align:left">同じロール同士で戦績を横並び比較。緑=上位／赤=下位の色分けで一目で分かる。</td></tr>
     <tr><td class="clickable" data-goto="detail">③ 選手詳細</td><td style="text-align:left"><b>指導の核となるページ。</b>まず<b>良くなったポイント</b>と自己ベスト/連勝バッジで成長を確認し、
       その後で改善したいポイントや成長トラッキング（試合ごと/日別）、デスの多い時間帯、チャンピオンプール、直近の試合履歴を見られます。選手名クリックでもここに来られます。</td></tr>
@@ -1053,7 +1129,7 @@ function renderGuide(){
     <p>直近の試合（既定10試合、5/15にも変更可）と、それより前の試合を比較して、<b>伸びている指標</b>を上位3つ表示します。
     数字が「悪かった頃→良くなった今」の形で並ぶので、練習の成果を実感しやすくなっています。
     十分な試合数（6試合以上）が無い場合や、まだ大きな伸びが見えない場合はその旨を表示します。</p>
-    <p class="note">①の「今、伸びている選手」は、全選手の中で最も伸び幅が大きかった人をピックアップしたものです。コーチが練習の最後に一言褒める際のヒントにどうぞ。</p>
+    <p class="note">①の「今、伸びている選手」は、直近2日間の練習日にプレイした選手の中から、最も伸び幅が大きかった人をピックアップしたものです。ロール・チームで絞り込みも可能。コーチが練習の最後に一言褒める際のヒントにどうぞ。</p>
   </section>
 
   <section><h2>⑤ 習熟度アイコンの操作方法</h2>
