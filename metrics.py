@@ -213,6 +213,7 @@ def build_match_record(match, timeline, part, meta):
         "goldPerMin": round(safe_div(part.get("goldEarned", 0), dur_min), 1),
         "dmgToChamp": dmg,
         "dmgTaken": part.get("totalDamageTaken", 0),       # 被ダメージ（合計）
+        "dmgTakenPerMin": round(safe_div(part.get("totalDamageTaken", 0), dur_min), 1),  # 被ダメージ/min（タンク系の評価用）
         "dmgPerMin": round(safe_div(dmg, dur_min), 1),
         "dmgShare": round(safe_div(dmg, team_dmg) * 100, 1),
         "killParticipation": round(safe_div(k + a, team_kills) * 100, 1),

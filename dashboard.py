@@ -19,6 +19,7 @@ MATCH_FIELDS = [
     "csAt10", "goldDiffAt10", "levelDiffAt10", "death10",
     "dmgShare", "killParticipation", "visionScore", "visionPerMin",
     "wardsPlaced", "controlWards", "dmgToChamp", "goldEarned",
+    "dmgPerMin", "dmgTakenPerMin",
     "deathBuckets", "firstBlood", "items",
 ]
 
@@ -35,6 +36,29 @@ ROLE_PRIORITY_METRICS = {
         "Bot": ["csPerMin", "deaths", "dmgShare"],
         "Support": ["kp", "wardsPlaced", "controlWards"],
     },
+}
+
+# チャンピオンの「タイプ」(Data Dragonのtags)ごとの重要指標。
+# 同じロールでも使用チャンピオンによって役割が変わるため（例: TopのTank型 vs Fighter型）、
+# ③選手詳細の「選手×チャンピオン詳細分析」でこのタイプ別指標をハイライトし、
+# チャンピオンごとのフィードバックに使う。
+# 提案理由:
+#  - ファイター: 交換勝ちが仕事なのでKDA・ダメージシェア・デス数・CS/minを重視。
+#  - タンク: キル数より「受けたダメージ(被ダメージ/min)」と、耐えて味方のキルにつなげる
+#            キル関与率が仕事。むやみに早死にしないことも大事なのでデスも見る。
+#  - メイジ: 安全に大ダメージを出せているか(ダメージシェア)、被弾せず(デス少)
+#            序盤の資源(CS@10)を取れているかを重視。
+#  - マークスマン: CS効率とダメージシェアが最重要。打たれ弱いので生存(デス少)も必須。
+#  - アサシン: 狙った相手を確実に沈められているか(KDA・ダメージシェア)、
+#              深追いして死なないか(デス)を重視。
+#  - サポート: キル関与・視界確保(視界スコア/ワード/コントロールワード)が仕事。
+TAG_PRIORITY_METRICS = {
+    "Fighter": ["kda", "dmgShare", "deaths", "csPerMin"],
+    "Tank": ["dmgTakenPerMin", "kp", "deaths"],
+    "Mage": ["dmgShare", "deaths", "csAt10"],
+    "Marksman": ["csPerMin", "dmgShare", "deaths"],
+    "Assassin": ["kda", "deaths", "dmgShare"],
+    "Support": ["kp", "visionPerMin", "wardsPlaced", "controlWards"],
 }
 
 # ブロンズ〜シルバー帯のおおよそのベンチマーク（編集可能: benchmarks.json で上書き）
@@ -136,6 +160,7 @@ def build_payload(records, cfg=None, champ_map=None, champ_tags=None):
         "champMap": champ_map or {},
         "champTags": champ_tags or {},
         "rolePriority": ROLE_PRIORITY_METRICS,
+        "tagPriority": TAG_PRIORITY_METRICS,
         "totals": {
             "n_players": n_players,
             "unique_games": len(unique_ids),
@@ -299,6 +324,7 @@ const M = {
   goldDiffAt10:{l:'ゴールド差@10',d:0,hi:true}, levelDiffAt10:{l:'レベル差@10',d:2,hi:true},
   dmgPerMin:{l:'Dmg/min',d:0,hi:true}, dmgShare:{l:'ダメージシェア%',d:1,hi:true},
   dmgDealt:{l:'平均与ダメージ',d:0,hi:true}, dmgTaken:{l:'平均被ダメージ',d:0,hi:false},
+  dmgTakenPerMin:{l:'被ダメージ/min',d:0,hi:true},   // タンク系の評価用（受けた量が多いほど盾役として機能）
   kp:{l:'キル関与率%',d:1,hi:true}, visionPerMin:{l:'視界スコア/min',d:2,hi:true},
   wardsPlaced:{l:'ワード設置/試合',d:1,hi:true}, controlWards:{l:'コントロールW/試合',d:1,hi:true},
   death10:{l:'デス@10',d:2,hi:false},
@@ -381,6 +407,11 @@ const TAG_METRIC_BOOST = {
   Fighter: [],
 };
 function champPrimaryTag(champId){ const tags=CHAMP_TAGS[champId]; return (tags && tags.length) ? tags[0] : null; }
+// チャンピオンタイプ(Fighter/Tank/Mage/Marksman/Assassin/Support)別の重要指標。
+// ③選手詳細の「選手×チャンピオン詳細分析」で、そのチャンピオンのタイプに応じた
+// 指標をハイライトし、フィードバックの基準に使う（同じロールでもチャンピオンで役割が変わるため）。
+const TAG_PRIORITY = DATA.tagPriority || {};
+function tagMetrics(tag){ return ((tag && TAG_PRIORITY[tag]) || []).filter(k=>M[k]); }
 // role(＋任意でchampId)の重要指標一覧（重複除去）。opts.forBench=true なら勝率を除く
 // （勝率はマッチメイキングで誰でも平均50%に寄るためランク帯比較には使わない）。
 function roleMetrics(role, opts, champId){
@@ -411,6 +442,19 @@ const BENCH_TIPS = {
   dmgShare:'集団戦の与ダメージを増やす。安全な位置から継続的にダメージを。',
   visionPerMin:'ワード設置・破壊を増やして視界スコアを上げよう。',
   wardsPlaced:'トリンケット/コントロールを切らさず設置する習慣を。',
+  controlWards:'コントロールワードを切らさず購入。相手の視界を消して安全に立ち回ろう。',
+  levelDiffAt10:'CSと経験値を意識してレベル差で遅れないように。',
+  dmgTakenPerMin:'前線に出て味方の代わりにダメージを受ける意識を。無理なら一度引いてタイミングを図ろう。',
+};
+// チャンピオンタイプ別のフィードバック文言（BENCH_TIPSと同じ指標は使い回し、タイプ特有の言い回しのみ追加）
+const TAG_TIPS = {
+  Tank:{ dmgTakenPerMin:'前に出て味方の代わりにダメージを受けられているか確認しよう。少なければポジション取りを見直そう。',
+         kp:'タンクはキルを取るより、味方が勝てる状況を作る（CC・前衛）ことが仕事。戦闘への関与自体は増やそう。' },
+  Fighter:{ dmgShare:'サイドレーンでの1対1を勝ちきり、チームの与ダメージを支えよう。' },
+  Mage:{ csAt10:'安全にCSを取りつつ、無理なポークで被弾しすぎないように。' },
+  Marksman:{ deaths:'ADCは打たれ弱いので、前に出すぎない立ち位置を徹底しよう。' },
+  Assassin:{ deaths:'仕留めた後の退路を確保。深追いによる無駄死にを減らそう。' },
+  Support:{ kp:'味方の戦闘に顔を出す回数を増やそう。エンチャント/エンゲージどちらのタイプでも関与が鍵。' },
 };
 // 改善提案: 目標ランク帯(既定Silver)に未達の指標を、未達度が大きい順に返す
 // 指標セットはそのロールの「重要指標」を優先的に使い、ベンチ値が無い指標は
@@ -818,8 +862,8 @@ function drawP2(){
 // =====================================================================
 //  ページ3：選手詳細
 // =====================================================================
-let P3={player:null, role:null, growth:'csAt10', coachLine:false, viewMode:'game', improveN:10};
-function openDetail(nick){ P3.player=nick; P3.role=null; document.querySelector('nav button[data-page="detail"]').click(); }
+let P3={player:null, role:null, champ:null, growth:'csAt10', coachLine:false, viewMode:'game', improveN:10};
+function openDetail(nick){ P3.player=nick; P3.role=null; P3.champ=null; document.querySelector('nav button[data-page="detail"]').click(); }
 function curP(){ return ALL.find(p=>p.nickname===P3.player); }
 function ensureRole(){ const p=curP(); const rs=p.rolesPlayed||[]; if(!P3.role || !rs.includes(P3.role)) P3.role = p.primaryRole || rs[0] || p.role; }
 function roleMatches(){ const p=curP(); return P3.role ? p.matches.filter(m=>m.playedRole===P3.role) : p.matches; }
@@ -855,10 +899,15 @@ function renderDetail(){
    <section><h2>チャンピオンプール</h2>
      <div class="scroll"><table id="p3Pool" class="ugg"></table></div>
      <div class="chart-sm" style="margin-top:14px"><canvas id="p3PoolChart"></canvas></div></section>
+   <section><h2>選手×チャンピオン 詳細分析</h2>
+     <div class="controls"><label>チャンピオン:</label><select id="p3Champ"></select></div>
+     <div id="p3ChampDetail"></div>
+     <div class="note">チャンピオンの「タイプ」（ファイター/タンク/メイジ/マークスマン/アサシン/サポート）ごとに重視すべき指標が異なるため、
+     ★が付いた指標を優先的にチェックしてください（同じロールでも使用チャンピオンによって役割が変わります）。試合数が少ない場合は参考程度に。</div></section>
    <section><h2>直近の試合履歴</h2><div class="scroll"><table id="p3Recent"></table></div></section>`;
   const sel=document.getElementById('p3Sel');
   sel.innerHTML=PLAYERS.map(p=>`<option ${p.nickname===P3.player?'selected':''}>${p.nickname}</option>`).join('');
-  sel.onchange=()=>{P3.player=sel.value; P3.role=null; ensureRole(); fillRoleSel(); drawP3();};
+  sel.onchange=()=>{P3.player=sel.value; P3.role=null; P3.champ=null; ensureRole(); fillRoleSel(); drawP3();};
   fillRoleSel();
   const gs=document.getElementById('p3Growth');
   ['csAt10','deaths','kda','csPerMin','goldDiffAt10','wardsPlaced','dmgShare'].forEach(k=>gs.appendChild(new Option(M[k].l,k)));
@@ -874,9 +923,9 @@ function renderDetail(){
 function fillRoleSel(){
   const p=curP(); const rs=p.rolesPlayed||[p.role]; const rsel=document.getElementById('p3Role');
   rsel.innerHTML=rs.map(r=>`<option value="${r}" ${r===P3.role?'selected':''}>${r}（${playerGames(p,r)}試合）</option>`).join('');
-  rsel.onchange=()=>{P3.role=rsel.value; drawP3();};
+  rsel.onchange=()=>{P3.role=rsel.value; P3.champ=null; drawP3();};
 }
-function drawP3(){ drawProfile(); drawBadges(); drawImprovements(); drawSuggest(); drawCoachCmp(); drawGrowth(); drawDeath(); drawLane(); drawPool(); drawRecent(); }
+function drawP3(){ drawProfile(); drawBadges(); drawImprovements(); drawSuggest(); drawCoachCmp(); drawGrowth(); drawDeath(); drawLane(); drawPool(); drawChampDetail(); drawRecent(); }
 function drawBadges(){
   const box=document.getElementById('p3Badges'); const ms=roleMatches();
   const streak=streakInfo(ms); const bests=personalBests(ms);
@@ -1012,11 +1061,12 @@ function drawPool(){
   const p=curP(); const pool=playerPool(p,P3.role);
   let h='<tr><th>順位</th><th>チャンピオン</th><th>勝率</th><th>KDA</th><th>最大K</th><th>最大D</th><th>CS</th><th>ダメージ</th><th>ゴールド</th></tr>';
   pool.forEach((c,i)=>{ const wc=c.winrate>=52?'var(--good)':(c.winrate<48?'var(--bad)':'var(--text)');
-    h+=`<tr><td>${i+1}</td><td style="text-align:left">${champCell(c.champ,c.champId)}</td>`+
+    h+=`<tr class="clickable" data-champid="${c.champId}" title="クリックで下の詳細分析を切替"><td>${i+1}</td><td style="text-align:left">${champCell(c.champ,c.champId)}</td>`+
       `<td><span style="color:${wc};font-weight:600">${fmt(c.winrate,0)}%</span> <span class="wl">${c.wins}W ${c.losses}L</span></td>`+
       `<td>${fmt(c.kda,2)}<div class="kda-sub">${fmt(c.avgKills,1)}/${fmt(c.avgDeaths,1)}/${fmt(c.avgAssists,1)}</div></td>`+
       `<td>${c.maxKills}</td><td>${c.maxDeaths}</td><td>${c.avgCs}</td><td>${(c.avgDmg||0).toLocaleString()}</td><td>${(c.avgGold||0).toLocaleString()}</td></tr>`; });
   document.getElementById('p3Pool').innerHTML=h;
+  document.querySelectorAll('#p3Pool tr[data-champid]').forEach(tr=>tr.onclick=()=>{ P3.champ=tr.dataset.champid; drawChampDetail(); });
   destroyCharts(['p3PoolChart']);
   const top=pool.slice(0,12);
   new Chart('p3PoolChart',{data:{labels:top.map(c=>c.champ),datasets:[
@@ -1024,6 +1074,79 @@ function drawPool(){
     {type:'line',label:'勝率%',data:top.map(c=>c.winrate),borderColor:'#e6e9ef',backgroundColor:'#e6e9ef',yAxisID:'y1',tension:0.3,pointRadius:3}
   ]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{position:'left',beginAtZero:true},
     y1:{position:'right',beginAtZero:true,max:100,grid:{drawOnChartArea:false}},x:{ticks:{maxRotation:60,minRotation:30}}}}});
+}
+// ===== 選手×チャンピオン 詳細分析（チャンピオンのタイプ別に重要指標をハイライト＋フィードバック） =====
+function champMatchesFor(p, champId, role){
+  const base = role ? p.matches.filter(m=>m.playedRole===role) : p.matches;
+  return base.filter(m=>m.championId===champId);
+}
+// 指定した試合群から、タイプ別分析に使う指標一式の平均値を返す
+const CHAMP_DETAIL_KEYS = ['winrate','kda','deaths','csPerMin','csAt10','goldDiffAt10','levelDiffAt10',
+  'dmgShare','dmgPerMin','dmgTakenPerMin','kp','visionPerMin','wardsPlaced','controlWards','death10'];
+function champAggAll(matches){
+  const out={games:matches.length};
+  CHAMP_DETAIL_KEYS.forEach(k=>{ out[k] = periodAvg(matches, k); });
+  return out;
+}
+// タイプの重要指標を先頭に、残りの標準指標(未使用のもの)を後ろに続ける（最大7枚まで）
+function champCardMetrics(tag){
+  const priority = tagMetrics(tag);
+  const extras = ['winrate','kda','deaths','csPerMin','dmgShare','visionPerMin'];
+  const list=[...priority]; const seen=new Set(priority);
+  extras.forEach(k=>{ if(!seen.has(k) && list.length<7){ seen.add(k); list.push(k); } });
+  return list;
+}
+function drawChampDetail(){
+  const p=curP(); const role=P3.role;
+  const pool=playerPool(p,role);
+  const sel=document.getElementById('p3Champ');
+  if(!pool.length){ sel.innerHTML=''; document.getElementById('p3ChampDetail').innerHTML='<div class="note">このロールでの使用チャンピオンがまだありません。</div>'; return; }
+  if(!P3.champ || !pool.find(c=>c.champId===P3.champ)) P3.champ = pool[0].champId;
+  sel.innerHTML = pool.map(c=>`<option value="${c.champId}" ${c.champId===P3.champ?'selected':''}>${c.champ}（${c.plays}戦）</option>`).join('');
+  sel.onchange=()=>{ P3.champ=sel.value; drawChampDetail(); };
+
+  const cinfo = pool.find(c=>c.champId===P3.champ);
+  const ms = champMatchesFor(p, P3.champ, role);
+  const agg = champAggAll(ms);
+  const tag = champPrimaryTag(P3.champ);
+  const tagLabel = tag ? (TAG_JA[tag]||tag) : null;
+  const priority = new Set(tagMetrics(tag));
+  const keys = champCardMetrics(tag);
+
+  const box=document.getElementById('p3ChampDetail');
+  let h=`<div style="margin-bottom:10px">${champCell(cinfo.champ,cinfo.champId)} `+
+    (tagLabel?`<span class="pill">タイプ: ${tagLabel}</span>`:`<span class="wl">（タイプ情報なし）</span>`)+
+    ` <span class="wl">${agg.games}戦${cinfo.wins}勝${cinfo.losses}敗</span></div>`;
+  if(agg.games < 3){ h+=`<div class="note" style="margin-bottom:8px">試合数がまだ少ないため（${agg.games}戦）、参考程度に見てください。</div>`; }
+  if(!tag){
+    h+=`<div class="note">このチャンピオンのタイプ情報が取得できていないため、タイプ別の重要指標は表示できません（オフライン環境など）。下記は通算の参考値です。</div>`;
+  }
+  h+='<div class="cards">';
+  keys.forEach(k=>{ const m=M[k]; if(!m) return; const v=agg[k]; const ra=roleAvg(role,k);
+    const better = ra!=null&&v!=null ? (m.hi ? v>=ra : v<=ra) : null;
+    const arrow = better==null?'':(better?'<span class="up">▲</span>':'<span class="down">▼</span>');
+    const isPriority = priority.has(k);
+    h+=`<div class="stat ${isPriority?'stat-priority':''}"><div class="l">${isPriority?'★ ':''}${m.l}</div><div class="n">${fmt(v,m.d)}${k==='winrate'?'%':''}</div>`+
+       `<div class="sub">ロール平均: ${fmt(ra,m.d)} ${arrow}</div></div>`; });
+  h+='</div>';
+
+  // フィードバック: タイプの重要指標のうち、ロール平均より明確に劣る指標にコメントを出す
+  if(tag){
+    const tips=[];
+    tagMetrics(tag).forEach(k=>{ const m=M[k]; if(!m) return; const v=agg[k]; const ra=roleAvg(role,k);
+      if(v==null||ra==null) return;
+      const short = m.hi ? (ra-v)/(Math.abs(ra)||1) : (v-ra)/(Math.abs(ra)||1);
+      if(short>0.05) tips.push({k, tip:(TAG_TIPS[tag]&&TAG_TIPS[tag][k]) || BENCH_TIPS[k] || ''}); });
+    if(tips.length){
+      h+='<div style="margin-top:10px">';
+      tips.slice(0,2).forEach(t=>{ h+=`<div style="margin-bottom:8px;padding:10px;background:var(--card2);border-left:3px solid var(--mid);border-radius:6px">`+
+        `<b>${M[t.k].l}</b><div class="note" style="margin-top:4px">${t.tip}</div></div>`; });
+      h+='</div>';
+    } else if(agg.games>=3){
+      h+=`<div class="note" style="margin-top:8px">${tagLabel}として重視する指標は、このチャンピオンではロール平均並み以上です。良い状態です。</div>`;
+    }
+  }
+  box.innerHTML=h;
 }
 function drawRecent(){
   const rows=[...roleMatches()].reverse().slice(0,30);
@@ -1190,6 +1313,16 @@ const GUIDE_METRIC_DESC = {
   wardsPlaced:'1試合あたりのワード設置数。',
   controlWards:'1試合あたりのコントロールワード購入・設置数。',
   death10:'10分時点までのデス数。序盤の被弾（ガンク等）の目安。',
+  dmgTakenPerMin:'1分あたりの被ダメージ。タンク系チャンピオンが前線で受けている量の目安（多いほど盾役として機能）。',
+};
+// チャンピオンタイプ別の重要指標（★ロールごとの重要指標と対になる、③のチャンピオン別分析で使用）
+const TAG_PRIORITY_DESC = {
+  Fighter:'KDA / ダメージシェア / 平均デス / CS/min',
+  Tank:'被ダメージ/min / キル関与率 / 平均デス',
+  Mage:'ダメージシェア / 平均デス / CS@10',
+  Marksman:'CS/min / ダメージシェア / 平均デス',
+  Assassin:'KDA / 平均デス / ダメージシェア',
+  Support:'キル関与率 / 視界スコア/min / ワード設置/試合 / コントロールW/試合',
 };
 function renderGuide(){
   const el=document.getElementById('page-guide');
@@ -1210,7 +1343,8 @@ function renderGuide(){
     <tr><td class="clickable" data-goto="overview">① 大会全体の概要</td><td style="text-align:left">全選手・チームの総合サマリー。<b>日別ハイライト</b>と<b>今、伸びている選手</b>で全体の成長を確認できます。ロール・チームで絞り込み可能。</td></tr>
     <tr><td class="clickable" data-goto="players">② 選手一覧＆比較</td><td style="text-align:left">同じロール同士で戦績を横並び比較。緑=上位／赤=下位の色分けで一目で分かる。</td></tr>
     <tr><td class="clickable" data-goto="detail">③ 選手詳細</td><td style="text-align:left"><b>指導の核となるページ。</b>まず<b>良くなったポイント</b>と自己ベスト/連勝バッジで成長を確認し、
-      その後で改善したいポイントや成長トラッキング（試合ごと/日別）、デスの多い時間帯、チャンピオンプール、直近の試合履歴を見られます。選手名クリックでもここに来られます。</td></tr>
+      その後で改善したいポイントや成長トラッキング（試合ごと/日別）、デスの多い時間帯、チャンピオンプール、<b>選手×チャンピオン詳細分析</b>（チャンピオンのタイプ別に重要指標とフィードバックを表示）、
+      直近の試合履歴を見られます。選手名クリックでもここに来られます。</td></tr>
     <tr><td class="clickable" data-goto="bench">④ ロール別ベンチマーク</td><td style="text-align:left">同ロール内での実数値ランキングと、コーチとの比較表。</td></tr>
     <tr><td class="clickable" data-goto="pool">⑤ チャンピオンプール（習熟度）</td><td style="text-align:left">選手ごとの得意・普通・練習中チャンピオンを一覧表示。アイコンをクリックすると習熟度を切替できます（下記参照）。</td></tr>
     </table>
@@ -1237,6 +1371,23 @@ function renderGuide(){
     <p class="note">チャンピオンプール（⑤・③）にはチャンピオンの「タイプ」（サポート/タンク/マークスマン等）も表示され、
     レーン内でもチャンピオンによって役割が異なることの参考にできます（Data Dragonから取得。オフライン環境等で取得できない場合は非表示）。
     ロールやチャンピオンによる重視指標の設定は<code>dashboard.py</code>の<code>ROLE_PRIORITY_METRICS</code>で調整できます。</p>
+  </section>
+
+  <section><h2>★ チャンピオンタイプ別の「重要指標」について（③選手×チャンピオン詳細分析）</h2>
+    <p>同じロールでも使用チャンピオンのタイプによって役割は変わります（例: Topのタンク型とファイター型では仕事が違う）。
+    ③選手詳細ページ下部の<b>「選手×チャンピオン 詳細分析」</b>では、チャンピオンプールの表またはドロップダウンから
+    チャンピオンを選ぶと、そのタイプの★重要指標をハイライトし、ロール平均と比べて見劣りする指標があればフィードバックを表示します。</p>
+    <table><tr><th>タイプ</th><th style="text-align:left">重要指標</th></tr>
+    <tr><td>ファイター</td><td style="text-align:left">${TAG_PRIORITY_DESC.Fighter}</td></tr>
+    <tr><td>タンク</td><td style="text-align:left">${TAG_PRIORITY_DESC.Tank}</td></tr>
+    <tr><td>メイジ</td><td style="text-align:left">${TAG_PRIORITY_DESC.Mage}</td></tr>
+    <tr><td>マークスマン</td><td style="text-align:left">${TAG_PRIORITY_DESC.Marksman}</td></tr>
+    <tr><td>アサシン</td><td style="text-align:left">${TAG_PRIORITY_DESC.Assassin}</td></tr>
+    <tr><td>サポート</td><td style="text-align:left">${TAG_PRIORITY_DESC.Support}</td></tr>
+    </table>
+    <p class="note">タンクのみ「被ダメージ/min」は多いほど良い指標として扱っています（前線で味方の代わりに受けている＝仕事をしている目安のため）。
+    チャンピオンのタイプ情報が取得できない場合（オフライン環境等）は、この分析は通算値の参考表示のみになります。
+    設定は<code>dashboard.py</code>の<code>TAG_PRIORITY_METRICS</code>で調整できます。</p>
   </section>
 
   <section><h2>⑤ 習熟度アイコンの操作方法</h2>
